@@ -27,7 +27,8 @@ independent R package with a modern spatial stack:
 - no code in this package uses `sf`;
 - it does not depend on `alphahull`, `rangeBuilder`, `rnaturalearth`, or a
   network service;
-- a Natural Earth 1:50m land layer is bundled for offline coastline clipping;
+- a pre-dissolved Natural Earth 1:50m land layer is stored as lazy internal
+  package data for offline coastline clipping;
 - the alpha-hull geometry and adaptive selection semantics are retained while
   the critical performance paths have been rewritten.
 
@@ -190,8 +191,9 @@ errors when fewer than three unique finite coordinates remain.
 ## Offline coastline clipping
 
 `clipToCoast = "terrestrial"` and `"aquatic"` use the bundled Natural Earth
-1:50m land layer. It is read and cached only on first use in an R session; no
-network request, download, or external data write is made.
+1:50m land layer. It is pre-dissolved and stored as lazy internal package data,
+then restored and cached only on first use in an R session; no network request,
+download, or external data write is made.
 
 ```r
 land <- loadWorldMap()
@@ -233,8 +235,8 @@ DynamicAlphaHull/
 │   ├── complement.R           # Complement geometry
 │   ├── ah2terra.R             # Arc hull to terra polygon conversion
 │   └── geometry.R             # Circle, rotation, arc, and polygon primitives
-├── inst/extdata/
-│   └── ne_50m_land.geojson    # Bundled offline Natural Earth land layer
+├── data/
+│   └── ne_50m_land.rda        # Lazy internal, dissolved Natural Earth land layer
 ├── tests/testthat/             # Geometry, Delaunay, and dynamic-range tests
 ├── man/                        # roxygen2-generated help pages
 ├── DESCRIPTION                 # Package metadata and dependencies

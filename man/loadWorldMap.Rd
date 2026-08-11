@@ -10,8 +10,9 @@ loadWorldMap()
 A \code{terra::SpatVector} containing one dissolved land polygon.
 }
 \description{
-Loads and dissolves the Natural Earth 1:50m land layer included with the
-package. The result is cached in memory for the current R session.
+Restores the pre-dissolved Natural Earth 1:50m land layer from the package's
+lazy internal data. The resulting \code{SpatVector} is cached for the current R
+session.
 }
 \examples{
 world <- loadWorldMap()

@@ -19,7 +19,7 @@ alpha-hull 几何算法，以及 `rangeBuilder` 根据点覆盖率和多边形�
 
 - 使用 `terra` 统一完成矢量几何、投影、缓冲与叠加；包内不使用 `sf`；
 - 不依赖 `alphahull`、`rangeBuilder`、`rnaturalearth` 或网络服务；
-- 内置 Natural Earth 1:50m 陆地数据，海岸裁切可完全离线进行；
+- 将预融合的 Natural Earth 1:50m 陆地数据作为 lazy internal data 内置，海岸裁切可完全离线进行；
 - 保留 alpha-hull 的几何语义与动态选择逻辑，并逐一重写性能关键路径。
 
 本包专注于从已清洗的出现记录构建 alpha-hull 范围；它不是通用 GIS 框架，也不负责
@@ -157,8 +157,8 @@ matrixRange <- getDynamicAlphaHull(as.matrix(records[, c("lon", "lat")]))
 ## 离线海岸裁切
 
 `clipToCoast = "terrestrial"` 或 `"aquatic"` 使用内置 Natural Earth 1:50m 陆地
-图层。它只在当前 R 会话首次使用时读取并缓存，不访问网络、不下载数据、也不写出外部
-文件：
+图层。该图层已预先融合为 lazy internal data，只在当前 R 会话首次使用时恢复并缓存；
+它不访问网络、不下载数据、也不写出外部文件：
 
 ```r
 land <- loadWorldMap()
@@ -197,7 +197,7 @@ DynamicAlphaHull/
 │   ├── complement.R           # 补集几何
 │   ├── ah2terra.R             # 圆弧 hull 转 terra 多边形
 │   └── geometry.R             # 圆、旋转、弧与多边形基础几何
-├── inst/extdata/ne_50m_land.geojson  # 内置、离线的陆地图层
+├── data/ne_50m_land.rda       # lazy internal data：已融合的离线陆地图层
 ├── tests/testthat/             # 几何、Delaunay 与动态范围测试
 ├── man/                        # roxygen2 生成的帮助页面
 ├── DESCRIPTION                 # 包元数据和依赖

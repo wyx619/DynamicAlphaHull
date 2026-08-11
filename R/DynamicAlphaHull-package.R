@@ -10,9 +10,10 @@
 #' @importFrom purrr imap
 #' @importFrom stats complete.cases dist
 #' @importFrom terra aggregate buffer convHull crds erase intersect is.empty is.valid
-#' @importFrom terra plot project relate vect
+#' @importFrom terra plot project relate unwrap vect
 #' @importClassesFrom terra SpatVector
 #' @importMethodsFrom terra plot
+#' @importFrom utils data
 #'
 #' @keywords internal
 "_PACKAGE"

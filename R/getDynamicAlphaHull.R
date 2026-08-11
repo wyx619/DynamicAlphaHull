@@ -230,8 +230,9 @@ worldMapCache <- new.env(parent = emptyenv())
 
 #' Load the bundled offline land polygon
 #'
-#' Loads and dissolves the Natural Earth 1:50m land layer included with the
-#' package. The result is cached in memory for the current R session.
+#' Restores the pre-dissolved Natural Earth 1:50m land layer from the package's
+#' lazy internal data. The resulting `SpatVector` is cached for the current R
+#' session.
 #'
 #' @return A `terra::SpatVector` containing one dissolved land polygon.
 #' @examples
@@ -242,11 +243,12 @@ loadWorldMap <- function() {
   if (exists("world", envir = worldMapCache, inherits = FALSE)) {
     return(get("world", envir = worldMapCache, inherits = FALSE))
   }
-  worldpath <- system.file("extdata", "ne_50m_land.geojson", package = "DynamicAlphaHull")
-  if (worldpath == "") {
-    stop("The bundled Natural Earth land dataset is missing.")
+  data("ne_50m_land", package = "DynamicAlphaHull", envir = worldMapCache)
+  if (!exists("ne_50m_land", envir = worldMapCache, inherits = FALSE)) {
+    stop("The bundled Natural Earth land data are missing.")
   }
-  world <- aggregate(vect(worldpath))
+  world <- unwrap(get("ne_50m_land", envir = worldMapCache, inherits = FALSE))
+  rm("ne_50m_land", envir = worldMapCache)
   assign("world", world, envir = worldMapCache)
   world
 }
