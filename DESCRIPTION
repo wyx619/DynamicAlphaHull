@@ -1,0 +1,23 @@
+Package: DynamicAlphaHull
+Type: Package
+Title: Dynamic Alpha-Hull Range Construction
+Version: 1.2.0
+Date: 2026-08-11
+Maintainer: Yuxuan Wang <wyx1743@gmail.com>
+Authors@R: 
+    person("Yuxuan Wang", email = "wyx1743@gmail.com",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0009-0003-7817-748X"))
+Depends: R (>= 4.1.0)
+Imports: data.table, deldir, purrr, terra
+Suggests: ggplot2, testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 8.0.0
+Description: Constructs geographic range polygons from occurrence coordinates
+    using a Delaunay-based alpha hull, terra vector geometry, buffering, and
+    optional offline coastline clipping.
+License: GPL-2 | GPL-3
+Encoding: UTF-8
+
+
