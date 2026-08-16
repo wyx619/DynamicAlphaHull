@@ -114,9 +114,9 @@ pointInPolygon <- function(x, y, polygonX, polygonY) {
 dummycoor <- function(triangulation, firstPoint, secondPoint, centre, away,
                       hull = NULL) {
   normal <- c(secondPoint[2] - firstPoint[2], firstPoint[1] - secondPoint[1])
-  normalLength <- sqrt(sum(normal^2))
-  if (normalLength == 0) return(centre)
-  normal <- normal / normalLength
+  norm <- sum(normal^2)
+  if (norm == 0) return(centre)
+  normal <- normal / norm
   midpoint <- (firstPoint + secondPoint) / 2
   testPoint <- midpoint + normal * 1e-5
   if (is.null(hull)) {

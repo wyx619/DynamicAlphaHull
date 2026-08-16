@@ -179,21 +179,32 @@ delvor <- function(x, y = NULL) {
   mesh[, 2] <- edgeUpper[firstRows]
   mesh[, 3:4] <- coordinates[mesh[, 1], , drop = FALSE]
   mesh[, 5:6] <- coordinates[mesh[, 2], , drop = FALSE]
+
   mesh[, 7:8] <- circumcentres[edgeTriangle[firstRows], , drop = FALSE]
   interior <- groupCounts == 2L
   if (any(interior)) {
     mesh[interior, 9:10] <- circumcentres[edgeTriangle[secondRows[interior]], , drop = FALSE]
   }
+
+  # For boundary edges, determine correct orientation before calling dummycoor
   if (any(!interior)) {
-    for (index in which(!interior)) {
-      mesh[index, 9:10] <- dummycoor(
-        triangulation,
-        mesh[index, 3:4],
-        mesh[index, 5:6],
-        mesh[index, 7:8],
-        away,
-        boundaryHull
-      )
+    boundaryIndices <- which(!interior)
+    for (i in boundaryIndices) {
+      p1 <- mesh[i, 3:4]
+      p2 <- mesh[i, 5:6]
+      center <- mesh[i, 7:8]
+
+      # Check if edge needs to be reversed for correct dummycoor calculation
+      # Cross product determines if the circumcenter is on the left of the edge
+      cross <- (p2[1] - p1[1]) * (center[2] - p1[2]) - (p2[2] - p1[2]) * (center[1] - p1[1])
+
+      if (cross < 0) {
+        # Circumcenter is on the right, reverse edge direction for dummycoor
+        mesh[i, 9:10] <- dummycoor(triangulation, p2, p1, center, away, boundaryHull)
+      } else {
+        # Circumcenter is on the left or collinear, edge direction is correct
+        mesh[i, 9:10] <- dummycoor(triangulation, p1, p2, center, away, boundaryHull)
+      }
     }
     mesh[!interior, 12] <- 1
   }
