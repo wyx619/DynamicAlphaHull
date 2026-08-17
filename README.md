@@ -55,8 +55,9 @@ result:
   the original arc-clipping state machine;
 - `ashape()` uses vectorised operations and `data.table` aggregation in place
   of per-edge ranking and temporary tables;
-- `getDynamicAlphaHull()` caches a Delaunay mesh while alpha is incremented.
-  The cache is invalidated and rebuilt only if its point set changes;
+- `getDynamicAlphaHull()` re-triangulates on every alpha attempt, mirroring
+  `rangeBuilder` exactly so the same `interp` jitter sequence is consumed under
+  a fixed seed;
 - `ah2terra()` ports `rangeBuilder::ah2sf` arc reordering and ring construction,
   and `dummycoor()` uses `interp::in.convex.hull` exactly as `alphahull` does.
 
@@ -68,9 +69,33 @@ Measured on this package (R 4.6, Windows):
 - a complete dynamic search over 500 points and 14 alpha attempts runs in about
   2.77 s.
 
-Across a 20-species validation against the original rangeBuilder baseline, the
-package was about 52% faster per species, with area differences of at most
-0.01%. Timings depend on point geometry, the alpha sequence, and hardware.
+Across a 2,296-species validation against the original rangeBuilder baseline,
+2,292 species (99.8%) match with a median area difference of 0.001%; the package
+is about 54% faster per species. Timings depend on point geometry, the alpha
+sequence, and hardware.
+
+## Ellipsoid geometry and the four non-matching species
+
+This package measures distance and area with `terra`'s GeographicLib ellipsoid
+and tests point-in-polygon in the same planar space in which the alpha hull is
+built. The reference `rangeBuilder` baseline, by contrast, ran with `sf`'s S2
+spherical geometry enabled, which models the Earth as a sphere. The ellipsoid
+is the more accurate model (the Earth bulges at the equator), so where the two
+differ, this package's answer is the more precise one.
+
+Four of 2,296 species diverge from the frozen baseline for library-level rather
+than algorithmic reasons:
+
+- `Pouzolzia guatemalana var. nivea` — S2 spherical versus planar
+  point-in-polygon in the coverage check;
+- `Brosimum rubescens` and `Ficus lutea` — S2/LWGEOM geodesic versus this
+  package's great-circle duplicate-point removal, which differ at the
+  sub-millimetre level on near-coincident records;
+- `Potentilla elegans` — a hull crossing the antimeridian, whose
+  self-intersection the `sf` and `terra` builds of GEOS classify differently.
+
+`Ficus lutea` also crashes the reference implementation (an unhandled
+`try-error` passed to `sf`), while this package returns a minimum convex hull.
 
 ## Installation
 

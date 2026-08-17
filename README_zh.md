@@ -38,7 +38,8 @@ alpha-hull 几何算法，以及 `rangeBuilder` 根据点覆盖率和多边形�
 
 - `ahull()` 先按圆心距离筛除不可能相交的圆弧对，只让可能相交的组合进入原有裁剪状态机；
 - `ashape()` 用向量化和 `data.table` 聚合替换逐边 `rank()` 与临时表；
-- `getDynamicAlphaHull()` 在 alpha 递增时缓存 Delaunay 网格；仅当点集变化时失效重建；
+- `getDynamicAlphaHull()` 每轮 alpha 都重新三角化，与 `rangeBuilder` 完全一致，使固定
+  种子下消耗相同的 `interp` jitter 序列；
 - `ah2terra()` 移植 `rangeBuilder::ah2sf` 的圆弧重排与环闭合算法；`dummycoor()` 与
   `alphahull` 一样使用 `interp::in.convex.hull`。
 
@@ -48,8 +49,26 @@ alpha-hull 几何算法，以及 `rangeBuilder` 根据点覆盖率和多边形�
 - 1,000 点、小 alpha 的 `ahull()` 约 0.39 秒（`alphahull::ahull` 约 1.00 秒）；
 - 500 点、14 次 alpha 尝试的完整动态流程约 2.77 秒。
 
-在 20 个真实物种与 rangeBuilder baseline 的对比中，本包每物种约快 52%，面积差异最大
-不超过 0.01%。实际耗时随点构型、alpha 序列和机器而变化。
+在 2,296 个真实物种与 rangeBuilder baseline 的对比中，2,292 个（99.8%）逐位一致，面积
+差异中位数 0.001%，本包每物种约快 54%。实际耗时随点构型、alpha 序列和机器而变化。
+
+## 椭球几何与四个不一致的物种
+
+本包用 `terra` 的 GeographicLib 椭球度量距离与面积，并在与 alpha-hull 构建相同的平面
+空间里做点是否在多边形内的判定。而参考实现 `rangeBuilder` 的 baseline 是在 `sf` 的 S2
+球面几何开启状态下运行的——S2 把地球当成正球体。椭球更精确（地球在赤道隆起），因此两者
+有出入时，本包的结果更精确。
+
+2,296 个物种中有 4 个与冻结的 baseline 不一致，原因是库层面的差异，而非算法错误：
+
+- `Pouzolzia guatemalana var. nivea` —— 覆盖率检查里 S2 球面 vs 平面的点在多边形内判定；
+- `Brosimum rubescens` 与 `Ficus lutea` —— 删除近似重复点时 S2/LWGEOM 椭球测地线 vs
+  本包的大圆距离，在近乎重合的记录上有亚毫米级差异；
+- `Potentilla elegans` —— hull 跨越反子午线，其自交在 `sf` 与 `terra` 各自链接的 GEOS
+  版本里被判为相反的有效性。
+
+此外 `Ficus lutea` 还会让参考实现直接崩溃（未处理的 `try-error` 传给了 `sf`），而本包
+会返回最小凸包。
 
 ## 安装
 

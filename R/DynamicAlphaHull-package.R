@@ -12,7 +12,11 @@
 #' @importFrom terra plot project relate unwrap vect
 #' @importClassesFrom terra SpatVector
 #' @importMethodsFrom terra plot
-#' @importFrom utils data
+#' @importFrom utils data globalVariables
 #'
 #' @keywords internal
 "_PACKAGE"
+
+# data.table non-standard evaluation columns referenced inside `[.data.table`
+# expressions in this package.
+utils::globalVariables(c(".", "value", "vertex"))
