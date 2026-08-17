@@ -66,39 +66,42 @@ result:
 - `ah2terra()` ports `rangeBuilder::ah2sf` arc reordering and ring construction,
   and `dummycoor()` uses `interp::in.convex.hull` exactly as `alphahull` does.
 
-End-to-end `getDynamicAlphaHull()` timings on real occurrence records (R 4.6,
-Windows, median of warm runs under `set.seed(1)`, `clipToCoast = "terrestrial"`):
+`getDynamicAlphaHull()` here is compared head-to-head with the traditional
+`alphahull` + `rangeBuilder` workflow it replaces: the same real occurrence
+records, the same parameters, a single R session (no parallel workers), and
+`set.seed(1)` inside every call so both implementations consume the identical
+RNG stream and select the same alpha sequence. Coast clipping is excluded
+(`clipToCoast = "no"`), matching how the reference pipeline invoked it. Measured
+with `microbenchmark` (R 4.6, Windows):
 
-| Species | Points | 1.4.0 (s) | 1.5.0 (s) | Speed-up |
-| --- | ---: | ---: | ---: | ---: |
-| Rubus idaeus | 3,995 | 37.89 | 4.97 | 7.6x |
-| Potentilla nivea | 1,654 | 7.73 | 5.00 | 1.5x |
-| Neillia incisa | 1,146 | 1.44 | 0.52 | 2.8x |
-| Ceanothus fendleri | 801 | 0.75 | 0.21 | 3.6x |
+| Species | Points | alphahull + rangeBuilder (s) | DynamicAlphaHull (s) | Speed-up | alpha |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Rubus idaeus | 3,995 | 153.97 | 5.62 | 27x | alpha15 |
+| Potentilla nivea | 1,654 | 24.72 | 5.33 | 4.6x | alpha30 |
+| Neillia incisa | 1,146 | 3.43 | 0.43 | 7.9x | alpha4 |
+| Ceanothus fendleri | 801 | 2.35 | 0.17 | 14x | alpha2 |
 
-Potentilla nivea needs a 30-attempt alpha search and Rubus idaeus a 15-attempt
-search; each attempt re-triangulates in `interp` (the same unoptimised C
-triangulation the reference uses) and the sequence is fixed by RNG parity, which
-caps how far the largest species can be accelerated. On a fixed alpha the pure-R
-geometry path is about 32-50% faster (`ahull()` on the same cleaned records,
-e.g. Rubus 0.31 to 0.21 s).
+Rubus and Potentilla are heavy: the adaptive search re-triangulates in `interp`
+on every alpha attempt (15 and 30 attempts respectively), and the RNG-aligned
+sequence is fixed by parity with the reference, which caps how far the largest
+species can be accelerated. The two implementations select the same alpha for
+every species (confirmed in the table); polygon equivalence is covered by the
+2,296-species validation below.
 
-Across a 2,296-species validation against the original rangeBuilder baseline,
-2,292 species (99.8%) match with a median area difference of 0.001%. The 1.5.0
-optimizations change no output: dropped points, alpha sequences, and polygons
-are bit-for-bit identical to 1.4.0. Timings depend on point geometry, the alpha
-sequence, and hardware.
+Across a 2,296-species validation against the original rangeBuilder reference,
+2,292 species (99.8%) match with a median area difference of 0.001%. Timings
+depend on point geometry, the alpha sequence, and hardware.
 
 ## Ellipsoid geometry and the four non-matching species
 
 This package measures distance and area with `terra`'s GeographicLib ellipsoid
 and tests point-in-polygon in the same planar space in which the alpha hull is
-built. The reference `rangeBuilder` baseline, by contrast, ran with `sf`'s S2
+built. The reference `rangeBuilder` implementation, by contrast, ran with `sf`'s S2
 spherical geometry enabled, which models the Earth as a sphere. The ellipsoid
 is the more accurate model (the Earth bulges at the equator), so where the two
 differ, this package's answer is the more precise one.
 
-Four of 2,296 species diverge from the frozen baseline for library-level rather
+Four of 2,296 species diverge from the frozen reference for library-level rather
 than algorithmic reasons:
 
 - `Pouzolzia guatemalana var. nivea` — S2 spherical versus planar

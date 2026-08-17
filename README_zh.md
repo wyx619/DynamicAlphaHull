@@ -46,33 +46,34 @@ alpha-hull 几何算法，以及 `rangeBuilder` 根据点覆盖率和多边形�
 - `ah2terra()` 移植 `rangeBuilder::ah2sf` 的圆弧重排与环闭合算法；`dummycoor()` 与
   `alphahull` 一样使用 `interp::in.convex.hull`。
 
-真实出现记录的端到端 `getDynamicAlphaHull()` 耗时（R 4.6，Windows，`set.seed(1)` 下预热
-多次取中位数，`clipToCoast = "terrestrial"`）：
+下面把本包的 `getDynamicAlphaHull()` 与它取代的传统 `alphahull` + `rangeBuilder`
+流程直接对比：同一批真实出现记录、相同参数、单 R 进程（无并行 worker），每次调用前
+`set.seed(1)`，使两个实现消耗完全相同的 RNG 流并选出相同的 alpha 序列。海岸裁切排除
+在外（`clipToCoast = "no"`），与参考管线的调用方式一致。用 `microbenchmark` 实测
+（R 4.6，Windows）：
 
-| 物种 | 点数 | 1.4.0 (s) | 1.5.0 (s) | 提速 |
-| --- | ---: | ---: | ---: | ---: |
-| Rubus idaeus | 3,995 | 37.89 | 4.97 | 7.6x |
-| Potentilla nivea | 1,654 | 7.73 | 5.00 | 1.5x |
-| Neillia incisa | 1,146 | 1.44 | 0.52 | 2.8x |
-| Ceanothus fendleri | 801 | 0.75 | 0.21 | 3.6x |
+| 物种 | 点数 | alphahull + rangeBuilder (s) | DynamicAlphaHull (s) | 提速 | alpha |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Rubus idaeus | 3,995 | 153.97 | 5.62 | 27x | alpha15 |
+| Potentilla nivea | 1,654 | 24.72 | 5.33 | 4.6x | alpha30 |
+| Neillia incisa | 1,146 | 3.43 | 0.43 | 7.9x | alpha4 |
+| Ceanothus fendleri | 801 | 2.35 | 0.17 | 14x | alpha2 |
 
-Potentilla nivea 需要 30 次、Rubus idaeus 需要 15 次的 alpha 搜索；每次尝试都在 `interp`
-里重新三角化（与参考实现相同的、未优化的 C 三角化），且搜索序列受 RNG 对等性约束固定，
-这限制了最大物种还能提升的上限。固定 alpha 时，纯 R 几何路径约快 32-50%（同一清洗数据上的
-`ahull()`，如 Rubus 从 0.31 秒降到 0.21 秒）。
+Rubus 与 Potentilla 较重：自适应搜索每轮 alpha 都在 `interp` 里重新三角化（分别 15 次和
+30 次），且序列受与参考实现一致的 RNG 对等性约束固定，这限制了最大物种还能提升的上限。
+两个实现为每个物种选出相同的 alpha（表中可见）；多边形等价性由下面的 2,296 物种验证覆盖。
 
-在 2,296 个真实物种与 rangeBuilder baseline 的对比中，2,292 个（99.8%）逐位一致，面积差异
-中位数 0.001%。1.5.0 的优化不改变任何输出：丢弃的点、alpha 序列与多边形都与 1.4.0 逐位相同。
-实际耗时随点构型、alpha 序列和机器而变化。
+在 2,296 个真实物种与 rangeBuilder 基线的对比中，2,292 个（99.8%）逐位一致，面积差异
+中位数 0.001%。实际耗时随点构型、alpha 序列和机器而变化。
 
 ## 椭球几何与四个不一致的物种
 
 本包用 `terra` 的 GeographicLib 椭球度量距离与面积，并在与 alpha-hull 构建相同的平面
-空间里做点是否在多边形内的判定。而参考实现 `rangeBuilder` 的 baseline 是在 `sf` 的 S2
+空间里做点是否在多边形内的判定。而参考实现 `rangeBuilder` 的基线是在 `sf` 的 S2
 球面几何开启状态下运行的——S2 把地球当成正球体。椭球更精确（地球在赤道隆起），因此两者
 有出入时，本包的结果更精确。
 
-2,296 个物种中有 4 个与冻结的 baseline 不一致，原因是库层面的差异，而非算法错误：
+2,296 个物种中有 4 个与冻结的基线不一致，原因是库层面的差异，而非算法错误：
 
 - `Pouzolzia guatemalana var. nivea` —— 覆盖率检查里 S2 球面 vs 平面的点在多边形内判定；
 - `Brosimum rubescens` 与 `Ficus lutea` —— 删除近似重复点时 S2/LWGEOM 椭球测地线 vs
