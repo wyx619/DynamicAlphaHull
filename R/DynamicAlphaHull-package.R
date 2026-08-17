@@ -8,7 +8,7 @@
 #' @importFrom grDevices chull xy.coords
 #' @importFrom purrr imap
 #' @importFrom stats complete.cases
-#' @importFrom terra aggregate buffer convHull crds erase intersect is.empty is.valid
+#' @importFrom terra aggregate buffer convHull crds erase intersect is.empty is.valid makeValid
 #' @importFrom terra plot project relate unwrap vect
 #' @importClassesFrom terra SpatVector
 #' @importMethodsFrom terra plot

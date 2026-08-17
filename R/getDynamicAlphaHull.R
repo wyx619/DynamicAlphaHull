@@ -191,7 +191,7 @@ getDynamicAlphaHull <- function(x, fraction = 0.95, partCount = 3,
     pointWithin <- relate(points, hull, "intersects")
     alphaVal <- alpha
     while (nrow(hull) > partCount ||
-           mean(rowSums(pointWithin) > 0) < fraction ||
+           sum(pointWithin) / nrow(points) < fraction ||
            !all(is.valid(hull))) {
       alpha <- alpha + alphaIncrement
       if (alpha > alphaCap) {
@@ -211,6 +211,7 @@ getDynamicAlphaHull <- function(x, fraction = 0.95, partCount = 3,
         hull <- project(hull, "EPSG:8857")
         hull <- buffer(hull, width = buff)
         hull <- project(hull, "EPSG:4326")
+        hull <- makeValid(hull)
         buffered <- TRUE
         pointWithin <- relate(points, hull, "intersects")
       }
@@ -226,6 +227,7 @@ getDynamicAlphaHull <- function(x, fraction = 0.95, partCount = 3,
     hull <- project(hull, "EPSG:8857")
     hull <- buffer(hull, width = buff)
     hull <- project(hull, "EPSG:4326")
+    hull <- makeValid(hull)
   }
 
   if (clipToCoast != "no") {
