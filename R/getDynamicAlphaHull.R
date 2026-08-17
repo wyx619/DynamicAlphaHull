@@ -98,131 +98,146 @@ getDynamicAlphaHull <- function(x, fraction = 0.95, partCount = 3,
     stop("Coordinates must be WGS 84 longitude and latitude values.")
   }
 
-  points <- vect(as.matrix(coordinates), type = "points", crs = "EPSG:4326")
-  pointCoordinates <- crds(points)
-  delaunay <- NULL
-  alpha <- initialAlpha
-  alphaVal <- alpha
-  buffered <- FALSE
-  problem <- qr(scale(pointCoordinates, scale = FALSE))$rank < 2
+  # Shuffle the leading rows while the first three points are collinear,
+  # mirroring rangeBuilder's pre-triangulation guard. This consumes RNG via
+  # sample() and, under a fixed seed, keeps the point order identical to the
+  # reference implementation.
+  coordinates <- as.matrix(coordinates)
+  allSameX <- all(coordinates[, 1] == coordinates[1, 1])
+  allSameY <- all(coordinates[, 2] == coordinates[1, 2])
+  while (!allSameX && !allSameY &&
+         ((coordinates[1, 1] == coordinates[2, 1] &&
+           coordinates[2, 1] == coordinates[3, 1]) ||
+          (coordinates[1, 2] == coordinates[2, 2] &&
+           coordinates[2, 2] == coordinates[3, 2]))) {
+    coordinates <- coordinates[sample(1:nrow(coordinates), size = nrow(coordinates)), , drop = FALSE]
+  }
 
-  if (!problem) {
+  points <- vect(coordinates, type = "points", crs = "EPSG:4326")
+  pointCoordinates <- crds(points)
+  alpha <- initialAlpha
+  problem <- FALSE
+
+  if (verbose) {
+    message("\talpha: ", alpha)
+  }
+
+  hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
+
+  # Drop near-duplicate points by great-circle distance, mirroring
+  # rangeBuilder's sf::st_distance closest-pair search.
+  while (inherits(hull, "try-error") && any(grepl("duplicate points", hull))) {
+    if (nrow(points) <= 3) {
+      stop("Fewer than 3 usable coordinates remain after duplicate-point removal.")
+    }
+    pointCoordinates <- crds(points)
+    n <- nrow(pointCoordinates)
+    lon <- pointCoordinates[, 1] * pi / 180
+    lat <- pointCoordinates[, 2] * pi / 180
+    distance <- matrix(Inf, n, n)
+    for (i in seq_len(n)) {
+      deltaLon <- lon[i] - lon
+      haversine <- sin((lat[i] - lat) / 2)^2 +
+        cos(lat[i]) * cos(lat) * sin(deltaLon / 2)^2
+      distance[i, ] <- 2 * asin(pmin(1, sqrt(haversine)))
+    }
+    diag(distance) <- Inf
+    closest <- which(distance == min(distance), arr.ind = TRUE)
+    points <- points[-closest[1, 1], ]
+    pointCoordinates <- crds(points)
+    hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
+    if (verbose) {
+      message("\tdropping a duplicate point")
+    }
+  }
+
+  # Second attempt at the current alpha, matching rangeBuilder.
+  hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
+
+  while (inherits(hull, "try-error")) {
     if (verbose) {
       message("\talpha: ", alpha)
     }
+    alpha <- alpha + alphaIncrement
     hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
-    if (!inherits(hull, "try-error")) {
-      delaunay <- hull$alphaShape$delaunay
-    }
-
-    while (inherits(hull, "try-error") && any(grepl("duplicate points", hull))) {
-      if (nrow(points) <= 3) {
-        stop("Fewer than 3 usable coordinates remain after duplicate-point removal.")
-      }
-      pointCoordinates <- crds(points)
-      # Drop the closest pair by great-circle distance, matching the original
-      # rangeBuilder, which uses sf::st_distance (spherical) rather than the
-      # planar degree-space distance. The radius is a constant scale factor and
-      # therefore does not affect which pair is closest.
-      n <- nrow(pointCoordinates)
-      lon <- pointCoordinates[, 1] * pi / 180
-      lat <- pointCoordinates[, 2] * pi / 180
-      distance <- matrix(Inf, n, n)
-      for (i in seq_len(n)) {
-        deltaLon <- lon[i] - lon
-        haversine <- sin((lat[i] - lat) / 2)^2 +
-          cos(lat[i]) * cos(lat) * sin(deltaLon / 2)^2
-        distance[i, ] <- 2 * asin(pmin(1, sqrt(haversine)))
-      }
-      diag(distance) <- Inf
-      closest <- which(distance == min(distance), arr.ind = TRUE)
-      points <- points[-closest[1, 1], ]
-      pointCoordinates <- crds(points)
-      delaunay <- NULL
-      hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
-      if (!inherits(hull, "try-error")) {
-        delaunay <- hull$alphaShape$delaunay
-      }
-      if (verbose) {
-        message("\tdropping a duplicate point")
-      }
-    }
-
-    while (inherits(hull, "try-error")) {
-      alpha <- alpha + alphaIncrement
-      if (alpha > alphaCap) {
-        problem <- TRUE
-        break
-      }
-      if (verbose) {
-        message("\talpha: ", alpha)
-      }
-      if (is.null(delaunay)) {
-        delaunay <- try(delvor(pointCoordinates), silent = TRUE)
-      }
-      hull <- if (inherits(delaunay, "try-error")) {
-        try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
-      } else {
-        try(ahull(delaunay, alpha = alpha), silent = TRUE)
-      }
-      if (!inherits(hull, "try-error")) {
-        delaunay <- hull$alphaShape$delaunay
-      }
+    if (alpha > alphaCap) {
+      problem <- TRUE
+      break
     }
   }
 
   if (!problem) {
     hull <- try(ah2terra(hull), silent = TRUE)
-    while (inherits(hull, "try-error") || nrow(hull) == 0 ||
-           any(is.empty(hull)) || !all(is.valid(hull))) {
+
+    validityCheck <- function(h) {
+      if (!is.null(h) && !inherits(h, "try-error")) {
+        if (!all(is.valid(h))) TRUE else FALSE
+      } else {
+        FALSE
+      }
+    }
+
+    while (is.null(hull) || inherits(hull, "try-error") || validityCheck(hull)) {
       alpha <- alpha + alphaIncrement
+      if (verbose) {
+        message("\talpha: ", alpha)
+      }
+      hull <- try(ah2terra(ahull(pointCoordinates, alpha = alpha)), silent = TRUE)
       if (alpha > alphaCap) {
         problem <- TRUE
         break
       }
-      if (verbose) {
-        message("\talpha: ", alpha)
-      }
-      hull <- try(ah2terra(ahull(delaunay, alpha = alpha)), silent = TRUE)
     }
   }
 
   if (!problem) {
     pointWithin <- relate(points, hull, "intersects")
     alphaVal <- alpha
+    buffered <- FALSE
+
     while (nrow(hull) > partCount ||
            sum(pointWithin) / nrow(points) < fraction ||
            !all(is.valid(hull))) {
       alpha <- alpha + alphaIncrement
-      if (alpha > alphaCap) {
-        problem <- TRUE
-        break
-      }
       if (verbose) {
         message("\talpha: ", alpha)
       }
-      candidate <- try(ahull(delaunay, alpha = alpha), silent = TRUE)
-      if (!inherits(candidate, "try-error")) {
-        candidate <- try(ah2terra(candidate), silent = TRUE)
+      hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
+      while (inherits(hull, "try-error") && alpha <= alphaCap) {
+        alpha <- alpha + alphaIncrement
+        hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
       }
-      if (!inherits(candidate, "try-error") && nrow(candidate) > 0 &&
-          !any(is.empty(candidate)) && all(is.valid(candidate))) {
-        hull <- candidate
+      if (!inherits(hull, "try-error")) {
+        hull <- ah2terra(hull)
+        hull <- project(hull, "EPSG:8857")
+        if (all(is.valid(hull))) {
+          hull <- buffer(hull, width = buff)
+          hull <- project(hull, "EPSG:4326")
+          hull <- makeValid(hull)
+          buffered <- TRUE
+          pointWithin <- relate(points, hull, "intersects")
+        }
+      }
+      alphaVal <- alpha
+      if (alpha > alphaCap) {
+        hull <- convHull(points)
         hull <- project(hull, "EPSG:8857")
         hull <- buffer(hull, width = buff)
         hull <- project(hull, "EPSG:4326")
-        hull <- makeValid(hull)
         buffered <- TRUE
-        pointWithin <- relate(points, hull, "intersects")
+        alphaVal <- "MCH"
+        break
       }
-      alphaVal <- alpha
     }
-  }
-
-  if (problem) {
+  } else {
     hull <- convHull(points)
+    hull <- project(hull, "EPSG:8857")
+    hull <- buffer(hull, width = buff)
+    hull <- project(hull, "EPSG:4326")
+    buffered <- TRUE
     alphaVal <- "MCH"
   }
+
   if (!buffered) {
     hull <- project(hull, "EPSG:8857")
     hull <- buffer(hull, width = buff)

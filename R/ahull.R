@@ -95,8 +95,8 @@ function (x, y = NULL, alpha)
                       centreDistance < arcs[watch, 3] + arcs[j, 3]
                   }
                   if (pairCanIntersect) {
-                    intersection <- inter(arcs[watch, 1], arcs[watch, 
-                      2], arcs[watch, 3], arcs[j, 1], arcs[j, 2], 
+                    intersection <- inter(arcs[watch, 1], arcs[watch,
+                      2], arcs[watch, 3], arcs[j, 1], arcs[j, 2],
                       arcs[j, 3])
                     if (intersection$n.cut == 2) {
                     v.arc <- c(arcs[watch, "v.x"], arcs[watch, 
@@ -316,8 +316,8 @@ function (x, y = NULL, alpha)
                       }
                     }
                   }
-                    case <- 0
                   }
+                  case <- 0
                 }
                 j <- j + 1
             }
