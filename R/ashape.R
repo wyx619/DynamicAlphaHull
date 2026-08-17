@@ -71,10 +71,9 @@ function (x, y = NULL, alpha)
     betweenHorizontal <- pm.x > pmin(aux[, "mx1"], aux[, "mx2"]) &
         pm.x < pmax(aux[, "mx1"], aux[, "mx2"])
     betw[(vertical & betweenVertical) | (!vertical & betweenHorizontal)] <- 1
-    l.min <- apply(cbind(dm1[is.edge], dm2[is.edge], dm * betw), 
-        1, min, na.rm = TRUE)
-    l.max <- apply(cbind(dm1[is.edge], dm2[is.edge], dm * betw), 
-        1, max, na.rm = TRUE)
+    edgeStats <- as.data.frame(cbind(dm1[is.edge], dm2[is.edge], dm * betw))
+    l.min <- do.call(pmin, c(edgeStats, list(na.rm = TRUE)))
+    l.max <- do.call(pmax, c(edgeStats, list(na.rm = TRUE)))
     in.ashape <- (l.min <= alpha & alpha <= l.max)
     edges <- matrix(t(aux[in.ashape, ]), byrow = TRUE, ncol = 12)
     colnames(edges) <- colnames(aux)

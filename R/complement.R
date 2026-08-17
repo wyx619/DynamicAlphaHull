@@ -52,14 +52,21 @@ function (x, y = NULL, alpha)
     thetam.m2 = acos(v.x.m2)
     n.edges <- dim(mesh)[1]
     betw = numeric(length = n.edges)
+    # Rank-based "middle of three" test, vectorised. rank() with average ties
+    # gives value 2 exactly to c only when c is strictly between a and b, or
+    # when a and b both equal c.
     vert <- mesh[, "mx1"] == mesh[, "mx2"]
-    if (sum(vert) > 0) {
-        betw[vert] <- apply(cbind(mesh[vert, "my1"], mesh[vert, 
-            "my2"], pm.y[vert]), 1, rank)[3, ] == 2
+    if (any(vert)) {
+        a <- mesh[vert, "my1"]
+        b <- mesh[vert, "my2"]
+        c <- pm.y[vert]
+        betw[vert] <- ((a < c) & (b > c)) | ((a > c) & (b < c)) | ((a == c) & (b == c))
     }
-    if (sum(!vert) > 0) {
-        betw[!vert] <- apply(cbind(mesh[!vert, "mx1"], mesh[!vert, 
-            "mx2"], pm.x[!vert]), 1, rank)[3, ] == 2
+    if (any(!vert)) {
+        a <- mesh[!vert, "mx1"]
+        b <- mesh[!vert, "mx2"]
+        c <- pm.x[!vert]
+        betw[!vert] <- ((a < c) & (b > c)) | ((a > c) & (b < c)) | ((a == c) & (b == c))
     }
     aux <- alpha^2 - dm^2
     comp1.1 <- NULL

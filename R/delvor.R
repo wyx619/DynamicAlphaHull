@@ -22,16 +22,31 @@ delvor <- function(x, y = NULL) {
 
   tri.obj <- interp::tri.mesh(X)
   tri <- interp::triangles(tri.obj)
-  nt <- nrow(tri)
-  circenter <- matrix(nrow = nt, ncol = 2)
-  colnames(circenter) <- c("circumx", "circumy")
-  for (i in seq_len(nt)) {
-    aux <- interp::circum(
-      c(coordinates[tri[i, 1], 1], coordinates[tri[i, 2], 1], coordinates[tri[i, 3], 1]),
-      c(coordinates[tri[i, 1], 2], coordinates[tri[i, 2], 2], coordinates[tri[i, 3], 2])
-    )
-    circenter[i, ] <- c(aux$x, aux$y)
-  }
+
+  # Circumcentres, vectorised from interp::circum (src/circum.cpp). The centre
+  # depends only on the double-precision side lengths and barycentric weights;
+  # the float fields circum also computes (radius, aspect ratio) are unused
+  # here. The operations mirror circum.cpp exactly for bit-identical results.
+  x1 <- coordinates[tri[, 1], 1]
+  y1 <- coordinates[tri[, 1], 2]
+  x2 <- coordinates[tri[, 2], 1]
+  y2 <- coordinates[tri[, 2], 2]
+  x3 <- coordinates[tri[, 3], 1]
+  y3 <- coordinates[tri[, 3], 2]
+  sideA <- sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1))
+  sideB <- sqrt((x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2))
+  sideC <- sqrt((x1 - x3) * (x1 - x3) + (y1 - y3) * (y1 - y3))
+  weightA <- sideA * sideA * (-sideA * sideA + sideB * sideB + sideC * sideC)
+  weightB <- sideB * sideB * (sideA * sideA - sideB * sideB + sideC * sideC)
+  weightC <- sideC * sideC * (sideA * sideA + sideB * sideB - sideC * sideC)
+  weightSum <- weightA + weightB + weightC
+  weightA <- weightA / weightSum
+  weightB <- weightB / weightSum
+  weightC <- weightC / weightSum
+  circenter <- cbind(
+    circumx = weightB * x1 + weightC * x2 + weightA * x3,
+    circumy = weightB * y1 + weightC * y2 + weightA * y3
+  )
   tri.info <- cbind(tri, circenter)
 
   n.tri <- nrow(tri.info)
@@ -55,18 +70,23 @@ delvor <- function(x, y = NULL) {
   bp1 <- (aux[, "indm1"] == 0)
   bp2 <- (aux[, "indm2"] == 0)
   is.dummy <- which(bp2)
-  circumcentres <- tri.info[, c("circumx", "circumy")]
+  # Preallocate the exact number of exterior circumcentres (one per boundary
+  # edge) so the fill loop never re-copies the growing matrix. rbind() names
+  # each appended row after its argument ("dum"); reproduce that row-name
+  # attribute so the final mesh is unchanged from the reference output.
+  circumcentres <- matrix(nrow = nrow(tri.info) + length(is.dummy), ncol = 2)
+  circumcentres[seq_len(nrow(tri.info)), ] <- tri.info[, c("circumx", "circumy")]
+  rownames(circumcentres) <- c(rep("", nrow(tri.info)), rep("dum", length(is.dummy)))
   away <- max(diff(range(coordinates[, 1])), diff(range(coordinates[, 2])))
   for (i in is.dummy) {
     n.tri <- n.tri + 1
-    dum <- dummycoor(
+    circumcentres[n.tri, ] <- dummycoor(
       tri.obj,
       coordinates[aux[i, "ind1"], ],
       coordinates[aux[i, "ind2"], ],
       tri.info[aux[i, "indm1"], c("circumx", "circumy")],
       away
     )
-    circumcentres <- rbind(circumcentres, dum)
     aux[i, "indm2"] <- n.tri
   }
 

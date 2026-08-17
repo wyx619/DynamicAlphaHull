@@ -66,10 +66,15 @@ ah2terra <- function(x, increment = 360, rnd = 10, crs = "EPSG:4326", tol = 1e-4
     return(vect(matrix(numeric(), ncol = 2), type = "polygons", crs = crs))
   }
 
-  # Build rings from the ordered arcs, ported from rangeBuilder::ah2sf.
+  # Build rings from the ordered arcs, ported from rangeBuilder::ah2sf. The
+  # running ring is appended to fixed-size buffers instead of grown with
+  # append(); each arc contributes at most `ipoints` points, so the total
+  # point count is bounded by the per-arc budget.
   rings <- list()
-  prevx <- NULL
-  prevy <- NULL
+  pointBudget <- sum(2 + round(increment * (arcs$theta / 2), 0))
+  prevx <- numeric(pointBudget)
+  prevy <- numeric(pointBudget)
+  ringLength <- 0L
 
   for (i in seq_len(nrow(arcs))) {
     rowi <- arcs[i, ]
@@ -86,29 +91,27 @@ ah2terra <- function(x, increment = 360, rnd = 10, crs = "EPSG:4326", tol = 1e-4
     xx <- round(cc[1] + r * cos(seqang), rnd)
     yy <- round(cc[2] + r * sin(seqang), rnd)
 
-    if (is.null(prevx)) {
-      prevx <- xx
-      prevy <- yy
-    } else if ((xx[1] == round(prevx[length(prevx)], rnd) ||
-                abs(xx[1] - prevx[length(prevx)]) < tol) &&
-               (yy[1] == round(prevy[length(prevy)], rnd) ||
-                abs(yy[1] - prevy[length(prevy)]) < tol)) {
+    if (ringLength == 0L) {
+      prevx[seq_len(ipoints)] <- xx
+      prevy[seq_len(ipoints)] <- yy
+      ringLength <- ipoints
+    } else if ((xx[1] == round(prevx[ringLength], rnd) ||
+                abs(xx[1] - prevx[ringLength]) < tol) &&
+               (yy[1] == round(prevy[ringLength], rnd) ||
+                abs(yy[1] - prevy[ringLength]) < tol)) {
+      prevx[(ringLength + 1):(ringLength + ipoints - 1)] <- xx[2:ipoints]
+      prevy[(ringLength + 1):(ringLength + ipoints - 1)] <- yy[2:ipoints]
+      ringLength <- ringLength + ipoints - 1
       if (i == nrow(arcs)) {
-        prevx <- append(prevx, xx[2:ipoints])
-        prevy <- append(prevy, yy[2:ipoints])
-        prevx[length(prevx)] <- prevx[1]
-        prevy[length(prevy)] <- prevy[1]
-        rings[[length(rings) + 1]] <- cbind(prevx, prevy)
-      } else {
-        prevx <- append(prevx, xx[2:ipoints])
-        prevy <- append(prevy, yy[2:ipoints])
+        prevx[ringLength] <- prevx[1]
+        prevy[ringLength] <- prevy[1]
+        rings[[length(rings) + 1]] <- cbind(prevx[seq_len(ringLength)], prevy[seq_len(ringLength)])
       }
     } else {
-      prevx[length(prevx)] <- prevx[1]
-      prevy[length(prevy)] <- prevy[1]
-      rings[[length(rings) + 1]] <- cbind(prevx, prevy)
-      prevx <- NULL
-      prevy <- NULL
+      prevx[ringLength] <- prevx[1]
+      prevy[ringLength] <- prevy[1]
+      rings[[length(rings) + 1]] <- cbind(prevx[seq_len(ringLength)], prevy[seq_len(ringLength)])
+      ringLength <- 0L
     }
   }
 
