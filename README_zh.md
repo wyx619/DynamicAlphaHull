@@ -20,27 +20,36 @@ alpha-hull 几何算法，以及 `rangeBuilder` 根据点覆盖率和多边形�
 - 使用 `terra` 统一完成矢量几何、投影、缓冲与叠加；包内不使用 `sf`；
 - 不依赖 `alphahull`、`rangeBuilder`、`rnaturalearth` 或网络服务；
 - 将预融合的 Natural Earth 1:50m 陆地数据作为 lazy internal data 内置，海岸裁切可完全离线进行；
-- 保留 alpha-hull 的几何语义与动态选择逻辑，并逐一重写性能关键路径。
+- 保留 alpha-hull 的几何语义与动态选择逻辑；Delaunay 三角剖分与 `alphahull` 一样取自
+  `interp`，使输出与参考实现逐位一致。
 
 本包专注于从已清洗的出现记录构建 alpha-hull 范围；它不是通用 GIS 框架，也不负责
 分类学、坐标质量或异常点清洗。
 
-## 性能贡献
+## 一致性与性能
 
-旧实现反复构建相同的 Delaunay 网格，并在 R 层产生大量小对象、逐边循环及不可能相交
-的圆对计算。本包在不改变核心算法语义的前提下完成了下列优化：
+几何算法按参考实现 `alphahull` / `rangeBuilder` 移植，保证输出完全一致。尤其是
+`delvor()` 使用 `interp::tri.mesh` —— 与 `alphahull` 完全相同的单精度三角剖分。这是
+有意的：三角剖分的边顺序决定 alpha-hull 的圆弧顺序，因此必须使用同一三角剖分才能保证
+多边形逐位一致。基于 `deldir` 的三角剖分虽然得到相同的边集，但顺序不同，最终多边形也
+不同，故 `delvor()` 不再使用它。
 
-- `delvor()` 直接从 `deldir` 三角剖分构造候选三角形和 mesh，避免 `triang.list()`、
-  重复边扫描与 list/data-frame 中间对象；
+其余性能优化在不改变结果的前提下保留：
+
 - `ahull()` 先按圆心距离筛除不可能相交的圆弧对，只让可能相交的组合进入原有裁剪状态机；
 - `ashape()` 用向量化和 `data.table` 聚合替换逐边 `rank()` 与临时表；
 - `getDynamicAlphaHull()` 在 alpha 递增时缓存 Delaunay 网格；仅当点集变化时失效重建；
-- 基础几何将多边形内点判定向量化，减少边界外心构建中的 R 循环和分配。
+- `ah2terra()` 移植 `rangeBuilder::ah2sf` 的圆弧重排与环闭合算法；`dummycoor()` 与
+  `alphahull` 一样使用 `interp::in.convex.hull`。
 
-固定开发基准中，3,000 点 `delvor()` 约从 2.88 秒降至 0.50 秒；1,000 点、小 alpha
-的 `ahull()` 约从 7.14 秒降至 0.80 秒；500 点、14 次 alpha 尝试的完整动态流程约从
-5.05 秒降至 2.28 秒。实际耗时随点构型、alpha 序列和机器而变化，但动态搜索不再对
-同一批点反复创建 Delaunay 三角剖分。
+本包实测（R 4.6，Windows）：
+
+- 3,000 点 `delvor()` 约 0.09 秒；
+- 1,000 点、小 alpha 的 `ahull()` 约 0.39 秒（`alphahull::ahull` 约 1.00 秒）；
+- 500 点、14 次 alpha 尝试的完整动态流程约 2.77 秒。
+
+在 20 个真实物种与 rangeBuilder baseline 的对比中，本包每物种约快 52%，面积差异最大
+不超过 0.01%。实际耗时随点构型、alpha 序列和机器而变化。
 
 ## 安装
 
@@ -51,7 +60,7 @@ install.packages("remotes")
 remotes::install_github("wyx619/DynamicAlphaHull")
 ```
 
-运行时依赖 `data.table`、`deldir`、`purrr` 与 `terra`，缺失的 R 依赖会自动安装。
+运行时依赖 `data.table`、`interp`、`purrr` 与 `terra`，缺失的 R 依赖会自动安装。
 某些平台安装 `terra` 时还需要 GDAL/PROJ 等系统组件。
 
 ## 快速开始
@@ -182,8 +191,7 @@ plot(polygon)
 ```
 
 将已有 `delvor` 对象传给 `ashape()` 或 `ahull()` 会复用三角剖分，适合试验多个
-alpha。`delaunayCandidates()` 与 `delaunayTriangles()` 也已导出，主要用于检查和高级
-开发。
+alpha。
 
 ## 项目结构
 
@@ -191,7 +199,7 @@ alpha。`delaunayCandidates()` 与 `delaunayTriangles()` 也已导出，主要�
 DynamicAlphaHull/
 ├── R/
 │   ├── getDynamicAlphaHull.R  # 动态范围构建与离线海岸裁切
-│   ├── delvor.R               # Delaunay 网格和候选三角形
+│   ├── delvor.R               # Delaunay 网格
 │   ├── ashape.R               # alpha-shape 边筛选
 │   ├── ahull.R                # alpha-hull 圆弧生成与裁剪
 │   ├── complement.R           # 补集几何
@@ -216,9 +224,9 @@ testthat::test_local(".")
 
 ## 依赖与边界
 
-运行时仅依赖 `data.table`、`deldir`、`purrr` 与 `terra`。`deldir` 提供底层 Delaunay
-三角剖分，`terra` 提供全部空间对象和 GIS 运算；本包在此之上实现 alpha-shape、
-alpha-hull 与动态范围选择。
+运行时仅依赖 `data.table`、`interp`、`purrr` 与 `terra`。`interp` 提供底层
+Delaunay 三角剖分（与 `alphahull` 相同），`terra` 提供全部空间对象和 GIS 运算；本包
+在此之上实现 alpha-shape、alpha-hull 与动态范围选择。
 
 请在调用前完成分类学、坐标精度、海陆一致性和异常点清洗。范围多边形只是输入记录及
 参数的几何概括，并不自动等同于物种真实分布或适生范围。

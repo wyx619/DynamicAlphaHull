@@ -96,37 +96,37 @@ pointInPolygon <- function(x, y, polygonX, polygonY) {
 
 #' Construct an exterior circumcentre for a boundary edge
 #'
-#' @param triangulation A `deldir` triangulation returned by [deldir::deldir()].
+#' Reproduces `alphahull::dummycoor`, testing the exterior side of a boundary
+#' edge against the convex hull of a `triSht` triangulation.
+#'
+#' @param tri.obj A `triSht` object returned by [interp::tri.mesh()].
 #' @param firstPoint,secondPoint Numeric coordinate vectors defining an edge.
 #' @param centre Circumcentre of the adjacent Delaunay triangle.
 #' @param away Distance used to place the exterior point.
-#' @param hull Optional precomputed convex-hull coordinate matrix.
 #'
 #' @return Numeric coordinate vector for the exterior circumcentre.
 #' @examples
-#' triangulation <- deldir::deldir(c(0, 1, 0), c(0, 0, 1), plot = FALSE)
+#' tri.obj <- interp::tri.mesh(c(0, 1, 0), c(0, 0, 1))
 #' dummycoor(
-#'   triangulation,
+#'   tri.obj,
 #'   firstPoint = c(0, 0), secondPoint = c(1, 0),
 #'   centre = c(0.5, 0.5), away = 1
 #' )
 #' @export
-dummycoor <- function(triangulation, firstPoint, secondPoint, centre, away,
-                      hull = NULL) {
-  normal <- c(secondPoint[2] - firstPoint[2], firstPoint[1] - secondPoint[1])
-  norm <- sum(normal^2)
-  if (norm == 0) return(centre)
-  normal <- normal / norm
-  midpoint <- (firstPoint + secondPoint) / 2
-  testPoint <- midpoint + normal * 1e-5
-  if (is.null(hull)) {
-    hull <- triangulation$summary[
-      chull(triangulation$summary[, c("x", "y")]), c("x", "y")
-    ]
+dummycoor <- function(tri.obj, firstPoint, secondPoint, centre, away) {
+  v <- secondPoint - firstPoint
+  v <- c(v[2], -v[1])
+  norm <- sum(v^2)
+  if (norm > 0) {
+    v <- v / norm
   }
-  if (pointInPolygon(testPoint[1], testPoint[2], hull[, 1], hull[, 2])) {
-    centre - away * normal
+  midpoint <- (firstPoint + secondPoint) / 2
+  eps <- 1e-05
+  testPoint <- midpoint + eps * v
+  inside <- interp::in.convex.hull(tri.obj, testPoint[1], testPoint[2])
+  if (inside) {
+    centre - away * v
   } else {
-    centre + away * normal
+    centre + away * v
   }
 }

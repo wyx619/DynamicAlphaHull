@@ -13,7 +13,10 @@ delvor(x, y = NULL)
 An object of class \code{delvor} containing the Delaunay mesh.
 }
 \description{
-Build the Delaunay mesh used by alpha-shape algorithms
+Reproduces \code{alphahull::delvor}, which triangulates with \code{interp::tri.mesh}.
+Using the same triangulation as the reference implementation keeps the edge
+order (and therefore the alpha-hull arc order) identical, so that downstream
+polygon construction matches the original rangeBuilder output exactly.
 }
 \examples{
 coordinates <- rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0.5, 0.5))

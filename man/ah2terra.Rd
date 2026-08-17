@@ -21,7 +21,9 @@ ah2terra(x, increment = 360, rnd = 10, crs = "EPSG:4326", tol = 1e-04)
 A \code{terra::SpatVector} containing polygon features.
 }
 \description{
-Convert an alpha hull to a terra polygon vector
+Reproduces the arc ordering and ring construction of the reference
+implementation (\code{rangeBuilder::ah2sf}, itself derived from \code{alphahull::ah2sp})
+so that the resulting polygons match the original rangeBuilder output exactly.
 }
 \examples{
 coordinates <- rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0.5, 0.5))

@@ -29,37 +29,48 @@ independent R package with a modern spatial stack:
   network service;
 - a pre-dissolved Natural Earth 1:50m land layer is stored as lazy internal
   package data for offline coastline clipping;
-- the alpha-hull geometry and adaptive selection semantics are retained while
-  the critical performance paths have been rewritten.
+- the alpha-hull geometry and adaptive selection semantics are retained, and
+  the Delaunay triangulation is sourced from `interp` exactly as in `alphahull`
+  so that output matches the reference implementation bit-for-bit.
 
 `DynamicAlphaHull` is deliberately focused: it constructs alpha-hull ranges
 from already cleaned occurrence records. It is not a general GIS framework or
 an occurrence-record cleaning package.
 
-## Performance work
+## Equivalence and performance
 
-The legacy implementation repeatedly built identical Delaunay meshes and spent
-substantial R time on small allocations, edge loops, and circle pairs that
-cannot intersect. The current implementation improves those paths without
-changing the geometric algorithm:
+The geometry is ported so that output matches the reference `alphahull` /
+`rangeBuilder` implementation exactly. In particular, `delvor()` triangulates
+with `interp::tri.mesh` — the same single-precision triangulation `alphahull`
+uses. This is deliberate: the triangulation edge order determines the alpha-hull
+arc order, so using the same triangulation is required for polygon equivalence.
+A `deldir`-based triangulation produced the same edge set in a different order,
+which changed the resulting polygons; it is therefore no longer used by
+`delvor()`.
 
-- `delvor()` builds candidate triangles and the mesh directly from `deldir`,
-  avoiding `triang.list()`, repeated edge scans, and list/data-frame materialisation;
+Performance work is retained elsewhere in the geometry path without changing the
+result:
+
 - `ahull()` rejects impossible circle pairs from centre distances before entering
   the original arc-clipping state machine;
 - `ashape()` uses vectorised operations and `data.table` aggregation in place
   of per-edge ranking and temporary tables;
 - `getDynamicAlphaHull()` caches a Delaunay mesh while alpha is incremented.
   The cache is invalidated and rebuilt only if its point set changes;
-- foundational geometry uses vectorised point-in-polygon calculations during
-  boundary exterior-centre construction.
+- `ah2terra()` ports `rangeBuilder::ah2sf` arc reordering and ring construction,
+  and `dummycoor()` uses `interp::in.convex.hull` exactly as `alphahull` does.
 
-On fixed development benchmarks, `delvor()` for 3,000 points fell from about
-2.88 s to 0.50 s, and a small-alpha `ahull()` for 1,000 points fell from about
-7.14 s to 0.80 s. A complete dynamic search over 500 points and 14 alpha
-attempts fell from about 5.05 s to 2.28 s. Timings depend on point geometry,
-the alpha sequence, and hardware, but an adaptive search no longer rebuilds
-the same Delaunay triangulation on every iteration.
+Measured on this package (R 4.6, Windows):
+
+- `delvor()` for 3,000 points runs in about 0.09 s;
+- a small-alpha `ahull()` for 1,000 points runs in about 0.39 s versus 1.00 s for
+  `alphahull::ahull`;
+- a complete dynamic search over 500 points and 14 alpha attempts runs in about
+  2.77 s.
+
+Across a 20-species validation against the original rangeBuilder baseline, the
+package was about 52% faster per species, with area differences of at most
+0.01%. Timings depend on point geometry, the alpha sequence, and hardware.
 
 ## Installation
 
@@ -70,7 +81,7 @@ install.packages("remotes")
 remotes::install_github("wyx619/DynamicAlphaHull")
 ```
 
-The package imports `data.table`, `deldir`, `purrr`, and `terra`; missing R
+The package imports `data.table`, `interp`, `purrr`, and `terra`; missing R
 dependencies are installed automatically. On some platforms, installing
 `terra` also requires GDAL/PROJ system libraries.
 
@@ -220,8 +231,6 @@ plot(polygon)
 
 Passing an existing `delvor` object to `ashape()` or `ahull()` reuses the
 triangulation and is preferable when exploring multiple alpha values.
-`delaunayCandidates()` and `delaunayTriangles()` are also exported for
-inspection and advanced development.
 
 ## Project layout
 
@@ -229,7 +238,7 @@ inspection and advanced development.
 DynamicAlphaHull/
 ├── R/
 │   ├── getDynamicAlphaHull.R  # Adaptive range construction and offline clipping
-│   ├── delvor.R               # Delaunay mesh and candidate triangles
+│   ├── delvor.R               # Delaunay mesh
 │   ├── ashape.R               # Alpha-shape edge selection
 │   ├── ahull.R                # Alpha-hull arc construction and clipping
 │   ├── complement.R           # Complement geometry
@@ -258,10 +267,11 @@ testthat::test_local(".")
 
 ## Dependencies and scope
 
-Runtime dependencies are limited to `data.table`, `deldir`, `purrr`, and
-`terra`. `deldir` supplies the underlying Delaunay triangulation, while
-`terra` provides all spatial objects and GIS operations; this package builds
-the alpha-shape, alpha-hull, and adaptive range selection above them.
+Runtime dependencies are limited to `data.table`, `interp`, `purrr`, and
+`terra`. `interp` supplies the underlying Delaunay triangulation (the same one
+used by `alphahull`), while `terra` provides all spatial objects and GIS
+operations; this package builds the alpha-shape, alpha-hull, and adaptive range
+selection above them.
 
 Complete taxonomic checks, coordinate-precision checks, land/sea consistency
 checks, and outlier cleaning before calling this package. A range polygon is a

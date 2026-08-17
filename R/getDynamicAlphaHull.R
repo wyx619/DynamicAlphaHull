@@ -120,9 +120,23 @@ getDynamicAlphaHull <- function(x, fraction = 0.95, partCount = 3,
         stop("Fewer than 3 usable coordinates remain after duplicate-point removal.")
       }
       pointCoordinates <- crds(points)
-      distance <- as.matrix(dist(pointCoordinates))
+      # Drop the closest pair by great-circle distance, matching the original
+      # rangeBuilder, which uses sf::st_distance (spherical) rather than the
+      # planar degree-space distance. The radius is a constant scale factor and
+      # therefore does not affect which pair is closest.
+      n <- nrow(pointCoordinates)
+      lon <- pointCoordinates[, 1] * pi / 180
+      lat <- pointCoordinates[, 2] * pi / 180
+      distance <- matrix(Inf, n, n)
+      for (i in seq_len(n)) {
+        deltaLon <- lon[i] - lon
+        haversine <- sin((lat[i] - lat) / 2)^2 +
+          cos(lat[i]) * cos(lat) * sin(deltaLon / 2)^2
+        distance[i, ] <- 2 * asin(pmin(1, sqrt(haversine)))
+      }
       diag(distance) <- Inf
-      points <- points[-arrayInd(which.min(distance), dim(distance))[1, ], ]
+      closest <- which(distance == min(distance), arr.ind = TRUE)
+      points <- points[-closest[1, 1], ]
       pointCoordinates <- crds(points)
       delaunay <- NULL
       hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)

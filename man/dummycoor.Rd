@@ -4,29 +4,28 @@
 \alias{dummycoor}
 \title{Construct an exterior circumcentre for a boundary edge}
 \usage{
-dummycoor(triangulation, firstPoint, secondPoint, centre, away, hull = NULL)
+dummycoor(tri.obj, firstPoint, secondPoint, centre, away)
 }
 \arguments{
-\item{triangulation}{A \code{deldir} triangulation returned by \code{\link[deldir:deldir]{deldir::deldir()}}.}
+\item{tri.obj}{A \code{triSht} object returned by \code{\link[interp:tri.mesh]{interp::tri.mesh()}}.}
 
 \item{firstPoint, secondPoint}{Numeric coordinate vectors defining an edge.}
 
 \item{centre}{Circumcentre of the adjacent Delaunay triangle.}
 
 \item{away}{Distance used to place the exterior point.}
-
-\item{hull}{Optional precomputed convex-hull coordinate matrix.}
 }
 \value{
 Numeric coordinate vector for the exterior circumcentre.
 }
 \description{
-Construct an exterior circumcentre for a boundary edge
+Reproduces \code{alphahull::dummycoor}, testing the exterior side of a boundary
+edge against the convex hull of a \code{triSht} triangulation.
 }
 \examples{
-triangulation <- deldir::deldir(c(0, 1, 0), c(0, 0, 1), plot = FALSE)
+tri.obj <- interp::tri.mesh(c(0, 1, 0), c(0, 0, 1))
 dummycoor(
-  triangulation,
+  tri.obj,
   firstPoint = c(0, 0), secondPoint = c(1, 0),
   centre = c(0.5, 0.5), away = 1
 )

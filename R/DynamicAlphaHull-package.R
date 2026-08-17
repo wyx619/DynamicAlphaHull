@@ -5,10 +5,9 @@
 #' returns a `terra::SpatVector`.
 #'
 #' @import data.table
-#' @importFrom deldir deldir
 #' @importFrom grDevices chull xy.coords
 #' @importFrom purrr imap
-#' @importFrom stats complete.cases dist
+#' @importFrom stats complete.cases
 #' @importFrom terra aggregate buffer convHull crds erase intersect is.empty is.valid
 #' @importFrom terra plot project relate unwrap vect
 #' @importClassesFrom terra SpatVector
