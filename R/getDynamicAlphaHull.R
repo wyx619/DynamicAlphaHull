@@ -125,25 +125,39 @@ getDynamicAlphaHull <- function(x, fraction = 0.95, partCount = 3,
   hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
 
   # Drop near-duplicate points by great-circle distance, mirroring
-  # rangeBuilder's sf::st_distance closest-pair search.
-  while (inherits(hull, "try-error") && any(grepl("duplicate points", hull))) {
-    if (nrow(points) <= 3) {
-      stop("Fewer than 3 usable coordinates remain after duplicate-point removal.")
-    }
+  # rangeBuilder's sf::st_distance closest-pair search. The full distance
+  # matrix is built once (in row chunks to bound peak memory, element-wise
+  # identical to the row loop) and then maintained incrementally: removing a
+  # point does not change the pairwise distances among the survivors, so each
+  # pass only discards the dropped row and column instead of rebuilding the
+  # whole matrix.
+  if (inherits(hull, "try-error") && any(grepl("duplicate points", hull))) {
     pointCoordinates <- crds(points)
     n <- nrow(pointCoordinates)
     lon <- pointCoordinates[, 1] * pi / 180
     lat <- pointCoordinates[, 2] * pi / 180
     distance <- matrix(Inf, n, n)
-    for (i in seq_len(n)) {
-      deltaLon <- lon[i] - lon
-      haversine <- sin((lat[i] - lat) / 2)^2 +
-        cos(lat[i]) * cos(lat) * sin(deltaLon / 2)^2
-      distance[i, ] <- 2 * asin(pmin(1, sqrt(haversine)))
+    CHUNK <- 512L
+    for (start in seq.int(1L, n, by = CHUNK)) {
+      end <- min(start + CHUNK - 1L, n)
+      idx <- start:end
+      deltaLat <- outer(lat[idx], lat, "-") / 2
+      deltaLon <- outer(lon[idx], lon, "-") / 2
+      haversine <- sin(deltaLat)^2 +
+        outer(cos(lat[idx]), cos(lat)) * sin(deltaLon)^2
+      d <- 2 * asin(pmin(1, sqrt(haversine)))
+      dim(d) <- c(length(idx), n)
+      distance[idx, ] <- d
     }
     diag(distance) <- Inf
+  }
+  while (inherits(hull, "try-error") && any(grepl("duplicate points", hull))) {
+    if (nrow(points) <= 3) {
+      stop("Fewer than 3 usable coordinates remain after duplicate-point removal.")
+    }
     closest <- which(distance == min(distance), arr.ind = TRUE)
     points <- points[-closest[1, 1], ]
+    distance <- distance[-closest[1, 1], -closest[1, 1], drop = FALSE]
     pointCoordinates <- crds(points)
     hull <- try(ahull(pointCoordinates, alpha = alpha), silent = TRUE)
     if (verbose) {

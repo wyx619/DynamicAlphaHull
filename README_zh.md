@@ -40,17 +40,30 @@ alpha-hull 几何算法，以及 `rangeBuilder` 根据点覆盖率和多边形�
 - `ashape()` 用向量化和 `data.table` 聚合替换逐边 `rank()` 与临时表；
 - `getDynamicAlphaHull()` 每轮 alpha 都重新三角化，与 `rangeBuilder` 完全一致，使固定
   种子下消耗相同的 `interp` jitter 序列；
+- `getDynamicAlphaHull()` 的近似重复点距离矩阵只构建一次，之后增量维护：丢弃一个点不会改变
+  其余点之间的距离，因此每轮只需删掉被丢弃点的行列，不再整体重建 O(n²) 矩阵。最近点对的
+  选择逻辑不变，丢弃的点序列逐位相同；
 - `ah2terra()` 移植 `rangeBuilder::ah2sf` 的圆弧重排与环闭合算法；`dummycoor()` 与
   `alphahull` 一样使用 `interp::in.convex.hull`。
 
-本包实测（R 4.6，Windows）：
+真实出现记录的端到端 `getDynamicAlphaHull()` 耗时（R 4.6，Windows，`set.seed(1)` 下预热
+多次取中位数，`clipToCoast = "terrestrial"`）：
 
-- 3,000 点 `delvor()` 约 0.09 秒；
-- 1,000 点、小 alpha 的 `ahull()` 约 0.39 秒（`alphahull::ahull` 约 1.00 秒）；
-- 500 点、14 次 alpha 尝试的完整动态流程约 2.77 秒。
+| 物种 | 点数 | 1.4.0 (s) | 1.5.0 (s) | 提速 |
+| --- | ---: | ---: | ---: | ---: |
+| Rubus idaeus | 3,995 | 37.89 | 4.97 | 7.6x |
+| Potentilla nivea | 1,654 | 7.73 | 5.00 | 1.5x |
+| Neillia incisa | 1,146 | 1.44 | 0.52 | 2.8x |
+| Ceanothus fendleri | 801 | 0.75 | 0.21 | 3.6x |
 
-在 2,296 个真实物种与 rangeBuilder baseline 的对比中，2,292 个（99.8%）逐位一致，面积
-差异中位数 0.001%，本包每物种约快 54%。实际耗时随点构型、alpha 序列和机器而变化。
+Potentilla nivea 需要 30 次、Rubus idaeus 需要 15 次的 alpha 搜索；每次尝试都在 `interp`
+里重新三角化（与参考实现相同的、未优化的 C 三角化），且搜索序列受 RNG 对等性约束固定，
+这限制了最大物种还能提升的上限。固定 alpha 时，纯 R 几何路径约快 32-50%（同一清洗数据上的
+`ahull()`，如 Rubus 从 0.31 秒降到 0.21 秒）。
+
+在 2,296 个真实物种与 rangeBuilder baseline 的对比中，2,292 个（99.8%）逐位一致，面积差异
+中位数 0.001%。1.5.0 的优化不改变任何输出：丢弃的点、alpha 序列与多边形都与 1.4.0 逐位相同。
+实际耗时随点构型、alpha 序列和机器而变化。
 
 ## 椭球几何与四个不一致的物种
 

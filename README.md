@@ -58,20 +58,35 @@ result:
 - `getDynamicAlphaHull()` re-triangulates on every alpha attempt, mirroring
   `rangeBuilder` exactly so the same `interp` jitter sequence is consumed under
   a fixed seed;
+- `getDynamicAlphaHull()` computes the great-circle distance matrix for
+  near-duplicate removal once and maintains it incrementally. Removing a point
+  does not change the distances among the survivors, so each pass only discards
+  the dropped row and column instead of rebuilding the whole O(n^2) matrix. The
+  closest-pair selection is unchanged, so the same points are dropped;
 - `ah2terra()` ports `rangeBuilder::ah2sf` arc reordering and ring construction,
   and `dummycoor()` uses `interp::in.convex.hull` exactly as `alphahull` does.
 
-Measured on this package (R 4.6, Windows):
+End-to-end `getDynamicAlphaHull()` timings on real occurrence records (R 4.6,
+Windows, median of warm runs under `set.seed(1)`, `clipToCoast = "terrestrial"`):
 
-- `delvor()` for 3,000 points runs in about 0.09 s;
-- a small-alpha `ahull()` for 1,000 points runs in about 0.39 s versus 1.00 s for
-  `alphahull::ahull`;
-- a complete dynamic search over 500 points and 14 alpha attempts runs in about
-  2.77 s.
+| Species | Points | 1.4.0 (s) | 1.5.0 (s) | Speed-up |
+| --- | ---: | ---: | ---: | ---: |
+| Rubus idaeus | 3,995 | 37.89 | 4.97 | 7.6x |
+| Potentilla nivea | 1,654 | 7.73 | 5.00 | 1.5x |
+| Neillia incisa | 1,146 | 1.44 | 0.52 | 2.8x |
+| Ceanothus fendleri | 801 | 0.75 | 0.21 | 3.6x |
+
+Potentilla nivea needs a 30-attempt alpha search and Rubus idaeus a 15-attempt
+search; each attempt re-triangulates in `interp` (the same unoptimised C
+triangulation the reference uses) and the sequence is fixed by RNG parity, which
+caps how far the largest species can be accelerated. On a fixed alpha the pure-R
+geometry path is about 32-50% faster (`ahull()` on the same cleaned records,
+e.g. Rubus 0.31 to 0.21 s).
 
 Across a 2,296-species validation against the original rangeBuilder baseline,
-2,292 species (99.8%) match with a median area difference of 0.001%; the package
-is about 54% faster per species. Timings depend on point geometry, the alpha
+2,292 species (99.8%) match with a median area difference of 0.001%. The 1.5.0
+optimizations change no output: dropped points, alpha sequences, and polygons
+are bit-for-bit identical to 1.4.0. Timings depend on point geometry, the alpha
 sequence, and hardware.
 
 ## Ellipsoid geometry and the four non-matching species
