@@ -1,7 +1,7 @@
 Package: DynamicAlphaHull
 Type: Package
 Title: Dynamic Alpha-Hull Range Construction
-Version: 1.5.0
+Version: 1.6.0
 Date: 2026-08-18
 Maintainer: Yuxuan Wang <wyx1743@gmail.com>
 Authors@R: 

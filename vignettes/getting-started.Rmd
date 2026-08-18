@@ -1,0 +1,314 @@
+---
+title: "Getting Started with DynamicAlphaHull"
+author: "Yuxuan Wang"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with DynamicAlphaHull}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Introduction
+
+**DynamicAlphaHull** is an R package for building species geographic
+ranges using alpha-hull methods with dynamic alpha parameter selection.
+It provides:
+
+- Efficient parallel processing of multiple species
+- Automatic alpha parameter optimization based on point density
+- Integration with 1-degree grid systems for biogeographic analysis
+- Vectorized geometry operations for performance
+- Reproducible workflows with deterministic random number generation
+
+This vignette demonstrates the basic workflow using the included
+`rosales_example` dataset.
+
+## Installation
+
+```{r install, eval = FALSE}
+# Install from GitHub
+# devtools::install_github("yourname/DynamicAlphaHull")
+
+# Load the package
+library(DynamicAlphaHull)
+```
+
+```{r load, message = FALSE}
+library(DynamicAlphaHull)
+library(data.table)
+library(terra)
+```
+
+## Example Data
+
+The package includes `rosales_example`, a dataset of 31,742 occurrence
+records for 100 Rosales species:
+
+```{r data}
+data(rosales_example)
+
+# Dataset structure
+str(rosales_example)
+
+# Summary statistics
+cat("Total records:", nrow(rosales_example), "\n")
+cat("Number of species:", uniqueN(rosales_example$accepted_name), "\n")
+cat("Data sources:", paste(unique(rosales_example$data_source), collapse = ", "), "\n")
+```
+
+### Species Distribution
+
+Let's look at the species with the most occurrence records:
+
+```{r species_summary}
+species_counts <- rosales_example[, .N, by = accepted_name][order(-N)]
+head(species_counts, 10)
+```
+
+### Geographic Coverage
+
+```{r geographic_coverage}
+# Coordinate ranges
+cat("Longitude range:", range(rosales_example$longitude), "\n")
+cat("Latitude range:", range(rosales_example$latitude), "\n")
+
+# Records per data source
+rosales_example[, .N, by = data_source]
+```
+
+## Basic Workflow
+
+### Step 1: Prepare Input Data
+
+Your occurrence data should be a `data.table` with columns: -
+`accepted_name` (or mapped via column mapping): species identifier -
+`longitude`: decimal degrees - `latitude`: decimal degrees -
+`data_source`: optional, source identifier
+
+```{r inspect_data}
+# Look at a few records for one species
+rosales_example[accepted_name == "Urtica urens"][1:5]
+```
+
+### Step 2: Load Reference Grid
+
+The package includes a 1-degree global grid for range discretization:
+
+```{r load_grid}
+# Load the included 1-degree grid
+data(grid_1deg)
+grid <- terra::unwrap(grid_1deg)
+
+# Grid properties
+cat("Grid cells:", terra::nrow(grid), "\n")
+cat("CRS:", terra::crs(grid, describe = TRUE)$name, "\n")
+cat("Coverage:", terra::ext(grid)[1:4], "\n")
+
+# Create range context
+context <- new_range_context(grid)
+```
+
+The `grid_1deg` dataset contains 19,196 cells covering the globe from
+56°S to 84°N. Each cell has a unique `grid_id` for efficient range
+representation.
+
+### Step 3: Build Alpha-Hull Ranges
+
+Use `build_family_ranges()` to compute ranges for all species in
+parallel:
+
+```{r build_ranges, eval = FALSE}
+# Set seed for reproducibility
+set.seed(42)
+
+# Build ranges with 4 workers
+result <- build_family_ranges(
+  rosales_example,
+  context,
+  workers = 4L,
+  alpha_timeout_seconds = 300,
+  progress = TRUE
+)
+```
+
+**Parameters:** - `workers`: Number of parallel workers (default: 4) -
+`alpha_timeout_seconds`: Timeout per species in seconds (default: 300) -
+`progress`: Show progress messages (default: FALSE) - `progress_file`:
+Optional file path to log progress
+
+### Step 4: Examine Results
+
+The result contains two components:
+
+```{r examine_results, eval = FALSE}
+# Summary table: one row per species
+names(result$summary)
+
+# Success rate
+cat("Successful species:", sum(result$summary$success), "/",
+    nrow(result$summary), "\n")
+
+# Range areas
+summary(result$summary$range_area_km2)
+
+# Processing time
+summary(result$summary$hull_elapsed_seconds)
+```
+
+**Summary columns:** - `species`: Species name - `point_count`: Number
+of occurrence records - `method`: Method used ("direct" for \<50 points,
+"alpha_hull" otherwise) - `success`: Whether range building succeeded -
+`grid_count`: Number of 1-degree grid cells in the range -
+`range_area_km2`: Total range area in square kilometers -
+`hull_elapsed_seconds`: Processing time for this species -
+`error_message`: Error details if `success == FALSE`
+
+```{r grid_distribution, eval = FALSE}
+# Grid distribution: grid cell IDs for each species
+str(result$grid_distribution)
+
+# Example: cells for one species
+head(result$grid_distribution[species == "Urtica urens"])
+```
+
+## Performance Considerations
+
+### Species Filtering
+
+For large datasets, consider filtering species by occurrence count:
+
+```{r filtering, eval = FALSE}
+# Keep species with 50-3000 occurrences
+species_counts <- rosales_example[, .N, by = accepted_name]
+moderate_species <- species_counts[N >= 50 & N < 3000, accepted_name]
+
+filtered_data <- rosales_example[accepted_name %in% moderate_species]
+
+# This avoids timeout issues with very large species
+```
+
+### Parallel Configuration
+
+Adjust workers based on your system:
+
+```{r parallel_config, eval = FALSE}
+# Conservative: use half of available cores
+workers <- max(1L, parallel::detectCores() %/% 2L)
+
+# Aggressive: use most cores (leave 1-2 for system)
+workers <- max(1L, parallel::detectCores() - 1L)
+```
+
+### Timeout Settings
+
+Species with many points (\>3000) may need longer timeouts:
+
+```{r timeout_config, eval = FALSE}
+# Default timeout
+result <- build_family_ranges(pts, context, alpha_timeout_seconds = 300)
+
+# Longer timeout for large species
+result <- build_family_ranges(pts, context, alpha_timeout_seconds = 600)
+```
+
+## Reproducibility
+
+For reproducible results, always set a seed before calling
+`build_family_ranges()`:
+
+```{r reproducibility, eval = FALSE}
+set.seed(42)
+result1 <- build_family_ranges(rosales_example, context, workers = 4L)
+
+set.seed(42)
+result2 <- build_family_ranges(rosales_example, context, workers = 4L)
+
+# Results should be identical
+identical(result1$summary, result2$summary)
+identical(result1$grid_distribution, result2$grid_distribution)
+```
+
+This works because: 1. `furrr_options(seed = TRUE)` derives per-task
+seeds from the master seed 2. Results are independent of worker count
+given the same master seed 3. The jitter mechanism in alpha-hull
+triangulation is deterministic
+
+## Example Analysis
+
+Here's a complete example analyzing the included dataset:
+
+```{r complete_example, eval = FALSE}
+library(DynamicAlphaHull)
+library(data.table)
+library(ggplot2)
+
+# Load data
+data(rosales_example)
+
+# Load grid and create context
+grid <- read_range_grid("path/to/1d/1.shp")
+context <- new_range_context(grid)
+
+# Build ranges
+set.seed(42)
+t0 <- Sys.time()
+result <- build_family_ranges(
+  rosales_example,
+  context,
+  workers = 8L,
+  alpha_timeout_seconds = 300,
+  progress = TRUE
+)
+elapsed <- difftime(Sys.time(), t0, units = "secs")
+
+# Summary statistics
+cat("Processing time:", round(elapsed, 1), "seconds\n")
+cat("Success rate:", sum(result$summary$success), "/",
+    nrow(result$summary), "\n")
+cat("Average per species:", round(elapsed / nrow(result$summary), 2), "s\n")
+
+# Analyze relationship between points and range size
+setDT(result$summary)
+ggplot(result$summary[success == TRUE],
+       aes(x = point_count, y = grid_count)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess") +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(
+    x = "Number of occurrence records",
+    y = "Number of 1-degree grid cells",
+    title = "Relationship between occurrences and range size"
+  ) +
+  theme_minimal()
+
+# Top 10 largest ranges
+result$summary[order(-range_area_km2)][1:10,
+  .(accepted_name = species, point_count, grid_count, range_area_km2)]
+```
+
+## Next Steps
+
+- See `?build_family_ranges` for detailed parameter documentation
+- Explore the validation scripts in `validation/` for production
+  workflows
+- Check out performance benchmarks in `validation/output/`
+
+## Session Info
+
+```{r session_info}
+sessionInfo()
+```
