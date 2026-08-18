@@ -259,7 +259,8 @@ library(ggplot2)
 data(rosales_example)
 
 # Load grid and create context
-grid <- read_range_grid("path/to/1d/1.shp")
+data(grid_1deg)
+grid <- terra::unwrap(grid_1deg)
 context <- new_range_context(grid)
 
 # Build ranges
