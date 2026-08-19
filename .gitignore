@@ -6,3 +6,5 @@ DynamicAlphaHull.Rcheck/
 *.tar.gz
 validation/
 .posit/assistant
+/doc/
+/Meta/
