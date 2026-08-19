@@ -55,24 +55,24 @@ data.table::uniqueN(rosales_example$accepted_name)
 rosales_example[, .N, by = accepted_name][order(-N)][1:10]
 
 \dontrun{
-# Build alpha-hull ranges for these species
-library(DynamicAlphaHull)
+# Build an alpha-hull range for one species and find its occupied 1-degree cells
 library(terra)
+data(grid_1deg)
+grid <- unwrap(grid_1deg)
 
-# Load 1-degree grid
-grid <- read_range_grid("path/to/1d/1.shp")
-context <- new_range_context(grid)
-
-# Build ranges
-result <- build_family_ranges(
-  rosales_example,
-  context,
-  workers = 4L,
-  alpha_timeout_seconds = 300
+species_data <- rosales_example[rosales_example$accepted_name == "Rosa canina", ]
+range <- getDynamicAlphaHull(
+  species_data,
+  coordHeaders = c("longitude", "latitude"),
+  clipToCoast = "terrestrial"
 )
+plot(range$hull, col = "lightblue", border = "steelblue")
+points(species_data$longitude, species_data$latitude, pch = 16)
 
-# Check results
-sum(result$summary$success)
+# Intersect the range with the 1-degree grid
+pairs <- terra::relate(grid, range$hull, relation = "intersects", pairs = TRUE)
+occupied_cells <- unique(grid$grid_id[pairs[, 1]])
+cat("Occupied cells:", length(occupied_cells), "\n")
 }
 }
 \keyword{datasets}
