@@ -7,8 +7,8 @@ vignette: >
   %\VignetteIndexEntry{Getting Started with DynamicAlphaHull}
   %\VignetteEncoding{UTF-8}
   %\VignetteEngine{knitr::rmarkdown}
-editor_options: 
-  markdown: 
+editor_options:
+  markdown:
     wrap: 72
 ---
 
@@ -23,290 +23,367 @@ knitr::opts_chunk$set(
 
 ## Introduction
 
-**DynamicAlphaHull** is an R package for building species geographic
-ranges using alpha-hull methods with dynamic alpha parameter selection.
-It provides:
+**DynamicAlphaHull** constructs species geographic range polygons from
+occurrence coordinates using an adaptive alpha-hull algorithm. The
+package automatically selects an appropriate alpha parameter to balance
+two goals: tightly fitting the occurrence points while maintaining a
+connected range polygon.
 
-- Efficient parallel processing of multiple species
-- Automatic alpha parameter optimization based on point density
-- Integration with 1-degree grid systems for biogeographic analysis
-- Vectorized geometry operations for performance
-- Reproducible workflows with deterministic random number generation
-
-This vignette demonstrates the basic workflow using the included
-`rosales_example` dataset.
+This vignette demonstrates the core workflow using the main function
+`getDynamicAlphaHull()`.
 
 ## Installation
 
 ```{r install, eval = FALSE}
 # Install from GitHub
-# devtools::install_github("yourname/DynamicAlphaHull")
+# remotes::install_github("YourUsername/DynamicAlphaHull")
 
 # Load the package
 library(DynamicAlphaHull)
 ```
 
-```{r load, message = FALSE}
+```{r load, echo = FALSE}
 library(DynamicAlphaHull)
-library(data.table)
-library(terra)
 ```
 
-## Example Data
+## Quick Start
 
-The package includes `rosales_example`, a dataset of 31,742 occurrence
-records for 100 Rosales species:
+The simplest workflow requires only occurrence coordinates:
 
-```{r data}
-data(rosales_example)
+```{r quickstart}
+# Create a small occurrence dataset
+points <- data.frame(
+  Longitude = c(116.0, 116.5, 116.4, 116.1, 115.8, 116.6),
+  Latitude = c(39.0, 39.0, 39.4, 39.3, 39.1, 39.2)
+)
 
-# Dataset structure
-str(rosales_example)
+# Build a range polygon
+result <- getDynamicAlphaHull(
+  points,
+  buff = 10000,        # 10km buffer
+  clipToCoast = "no"   # don't clip to coastline
+)
 
-# Summary statistics
-cat("Total records:", nrow(rosales_example), "\n")
-cat("Number of species:", uniqueN(rosales_example$accepted_name), "\n")
-cat("Data sources:", paste(unique(rosales_example$data_source), collapse = ", "), "\n")
+# Plot the result
+plot(result$hull, col = "lightblue", border = "blue")
+points(points$Longitude, points$Latitude, pch = 16, cex = 1.5)
 ```
 
-### Species Distribution
+The function returns a list with two elements:
 
-Let's look at the species with the most occurrence records:
+- `hull`: A `terra::SpatVector` polygon representing the species range
+- `alpha`: The selected alpha value (as a character label)
 
-```{r species_summary}
-species_counts <- rosales_example[, .N, by = accepted_name][order(-N)]
-head(species_counts, 10)
+```{r quickstart_inspect}
+cat("Selected alpha:", result$alpha, "\n")
+cat("Range is a", class(result$hull)[1], "\n")
 ```
 
-### Geographic Coverage
+## Understanding Parameters
 
-```{r geographic_coverage}
-# Coordinate ranges
-cat("Longitude range:", range(rosales_example$longitude), "\n")
-cat("Latitude range:", range(rosales_example$latitude), "\n")
+### Core Parameters
 
-# Records per data source
-rosales_example[, .N, by = data_source]
-```
+**alpha**: Controls how tightly the polygon wraps around points. The
+algorithm starts at `initialAlpha` and increases by `alphaIncrement`
+until it finds a suitable value.
 
-## Basic Workflow
+**fraction**: Minimum proportion of occurrences that must fall within
+the polygon (default: 0.95). Higher values produce more inclusive
+ranges.
 
-### Step 1: Prepare Input Data
+**partCount**: Maximum number of disconnected polygon parts allowed
+(default: 3). This prevents highly fragmented ranges.
 
-Your occurrence data should be a `data.table` with columns: -
-`accepted_name` (or mapped via column mapping): species identifier -
-`longitude`: decimal degrees - `latitude`: decimal degrees -
-`data_source`: optional, source identifier
+**buff**: Buffer distance in meters applied to the final polygon
+(default: 10,000m). This accounts for spatial uncertainty in occurrence
+records.
 
-```{r inspect_data}
-# Look at a few records for one species
-rosales_example[accepted_name == "Urtica urens"][1:5]
-```
+### Coastline Clipping
 
-### Step 2: Load Reference Grid
+**clipToCoast**: Controls whether to clip the range to land or water:
 
-The package includes a 1-degree global grid for range discretization:
+- `"no"`: No clipping (default for quick examples)
+- `"terrestrial"`: Clip to land (for terrestrial species)
+- `"aquatic"`: Clip to water bodies (for aquatic species)
 
-```{r load_grid}
-# Load the included 1-degree grid
-data(grid_1deg)
-grid <- terra::unwrap(grid_1deg)
-
-# Grid properties
-cat("Grid cells:", terra::nrow(grid), "\n")
-cat("CRS:", terra::crs(grid, describe = TRUE)$name, "\n")
-cat("Coverage:", terra::ext(grid)[1:4], "\n")
-
-# Create range context
-context <- new_range_context(grid)
-```
-
-The `grid_1deg` dataset contains 19,196 cells covering the globe from
-56°S to 84°N. Each cell has a unique `grid_id` for efficient range
-representation.
-
-### Step 3: Build Alpha-Hull Ranges
-
-Use `build_family_ranges()` to compute ranges for all species in
-parallel:
-
-```{r build_ranges, eval = FALSE}
-# Set seed for reproducibility
-set.seed(42)
-
-# Build ranges with 4 workers
-result <- build_family_ranges(
-  rosales_example,
-  context,
-  workers = 4L,
-  alpha_timeout_seconds = 300,
-  progress = TRUE
+```{r coastline_demo, eval = FALSE}
+# Terrestrial species - clip to land
+terrestrial_range <- getDynamicAlphaHull(
+  points,
+  clipToCoast = "terrestrial"
 )
 ```
 
-**Parameters:** - `workers`: Number of parallel workers (default: 4) -
-`alpha_timeout_seconds`: Timeout per species in seconds (default: 300) -
-`progress`: Show progress messages (default: FALSE) - `progress_file`:
-Optional file path to log progress
+The package includes an offline Natural Earth 1:50m land polygon, so no
+internet connection is required.
 
-### Step 4: Examine Results
+## Working with Example Data
 
-The result contains two components:
+The package includes occurrence data for 100 Rosales species:
 
-```{r examine_results, eval = FALSE}
-# Summary table: one row per species
-names(result$summary)
-
-# Success rate
-cat("Successful species:", sum(result$summary$success), "/",
-    nrow(result$summary), "\n")
-
-# Range areas
-summary(result$summary$range_area_km2)
-
-# Processing time
-summary(result$summary$hull_elapsed_seconds)
+```{r example_data}
+data(rosales_example)
+head(rosales_example)
 ```
 
-**Summary columns:** - `species`: Species name - `point_count`: Number
-of occurrence records - `method`: Method used ("direct" for \<50 points,
-"alpha_hull" otherwise) - `success`: Whether range building succeeded -
-`grid_count`: Number of 1-degree grid cells in the range -
-`range_area_km2`: Total range area in square kilometers -
-`hull_elapsed_seconds`: Processing time for this species -
-`error_message`: Error details if `success == FALSE`
+Each record contains:
 
-```{r grid_distribution, eval = FALSE}
-# Grid distribution: grid cell IDs for each species
-str(result$grid_distribution)
+- `accepted_name`: Species name
+- `longitude`, `latitude`: Coordinates in decimal degrees
+- `data_source`: Data origin (WCVP or GBIF)
 
-# Example: cells for one species
-head(result$grid_distribution[species == "Urtica urens"])
+### Single Species Example
+
+Let's build a range for one species:
+
+```{r single_species}
+library(data.table)
+setDT(rosales_example)
+
+# Select a species with moderate occurrence count
+species_name <- "Rosa canina"
+species_data <- rosales_example[accepted_name == species_name]
+
+cat("Building range for", species_name, "\n")
+cat("Occurrence records:", nrow(species_data), "\n")
+
+# Build the range
+range_result <- getDynamicAlphaHull(
+  species_data,
+  fraction = 0.95,
+  partCount = 3,
+  buff = 10000,
+  initialAlpha = 3,
+  coordHeaders = c("longitude", "latitude"),
+  clipToCoast = "terrestrial"
+)
+
+cat("Selected alpha:", range_result$alpha, "\n")
 ```
 
-## Performance Considerations
+### Visualizing the Range
 
-### Species Filtering
+```{r visualize}
+# Plot the range polygon
+plot(range_result$hull, 
+     col = adjustcolor("forestgreen", alpha = 0.3),
+     border = "darkgreen",
+     lwd = 2,
+     main = paste("Geographic Range:", species_name))
 
-For large datasets, consider filtering species by occurrence count:
-
-```{r filtering, eval = FALSE}
-# Keep species with 50-3000 occurrences
-species_counts <- rosales_example[, .N, by = accepted_name]
-moderate_species <- species_counts[N >= 50 & N < 3000, accepted_name]
-
-filtered_data <- rosales_example[accepted_name %in% moderate_species]
-
-# This avoids timeout issues with very large species
+# Add occurrence points
+points(species_data$longitude, 
+       species_data$latitude,
+       pch = 16, 
+       cex = 0.3, 
+       col = "darkred")
 ```
 
-### Parallel Configuration
+### Calculating Range Size
 
-Adjust workers based on your system:
+```{r range_size}
+library(terra)
 
-```{r parallel_config, eval = FALSE}
-# Conservative: use half of available cores
-workers <- max(1L, parallel::detectCores() %/% 2L)
+# Project to equal-area projection for accurate area calculation
+range_proj <- project(range_result$hull, "EPSG:6933")
+area_km2 <- expanse(range_proj, unit = "km")
 
-# Aggressive: use most cores (leave 1-2 for system)
-workers <- max(1L, parallel::detectCores() - 1L)
+cat("Range area:", round(area_km2), "km²\n")
 ```
 
-### Timeout Settings
+## Grid-Based Range Representation
 
-Species with many points (\>3000) may need longer timeouts:
+For comparative analyses across many species, it's often useful to
+represent ranges as sets of grid cells rather than complex polygons. The
+package includes a 1-degree global reference grid:
 
-```{r timeout_config, eval = FALSE}
-# Default timeout
-result <- build_family_ranges(pts, context, alpha_timeout_seconds = 300)
+```{r grid_setup}
+data(grid_1deg)
+grid <- unwrap(grid_1deg)
 
-# Longer timeout for large species
-result <- build_family_ranges(pts, context, alpha_timeout_seconds = 600)
+cat("Grid cells:", nrow(grid), "\n")
+head(grid)
 ```
+
+### Finding Occupied Grid Cells
+
+```{r grid_intersection}
+# Find which grid cells the range intersects
+pairs <- relate(grid, range_result$hull, relation = "intersects", pairs = TRUE)
+
+if (is.matrix(pairs) && nrow(pairs) > 0) {
+  occupied_cells <- unique(grid$grid_id[pairs[, 1]])
+  cat("Grid cells occupied:", length(occupied_cells), "\n")
+  cat("First 10 cell IDs:", head(occupied_cells, 10), "\n")
+}
+```
+
+This compact representation is useful for:
+
+- Efficiently storing ranges for many species
+- Computing range overlaps
+- Calculating diversity metrics
+- Comparing range sizes across species
+
+### Visualizing Grid Representation
+
+```{r grid_viz, eval = FALSE}
+# Extract occupied grid cells
+occupied_grid <- grid[grid$grid_id %in% occupied_cells, ]
+
+# Plot both representations
+plot(range_result$hull, 
+     col = adjustcolor("blue", alpha = 0.3),
+     border = "blue",
+     main = "Range Polygon vs Grid Representation")
+plot(occupied_grid, 
+     col = adjustcolor("red", alpha = 0.2),
+     border = "red",
+     add = TRUE)
+```
+
+## Processing Multiple Species
+
+For batch processing, you can loop over species or use parallel
+processing:
+
+```{r batch_basic, eval = FALSE}
+# Get species with moderate occurrence counts
+counts <- rosales_example[, .N, by = accepted_name]
+target_species <- counts[N >= 50 & N <= 500, accepted_name]
+
+# Process each species
+results_list <- list()
+for (sp in target_species) {
+  sp_data <- rosales_example[accepted_name == sp]
+  
+  result <- tryCatch({
+    getDynamicAlphaHull(
+      sp_data,
+      coordHeaders = c("longitude", "latitude"),
+      clipToCoast = "terrestrial"
+    )
+  }, error = function(e) NULL)
+  
+  if (!is.null(result)) {
+    results_list[[sp]] <- result
+  }
+}
+```
+
+### Parallel Processing
+
+For larger datasets, use parallel processing to speed up computation:
+
+```{r parallel, eval = FALSE}
+library(future)
+library(furrr)
+
+# Set up parallel processing
+plan(multisession, workers = 4)
+
+# Process species in parallel
+results <- target_species |>
+  furrr::future_map(
+    function(sp) {
+      sp_data <- rosales_example[accepted_name == sp]
+      getDynamicAlphaHull(
+        sp_data,
+        coordHeaders = c("longitude", "latitude"),
+        clipToCoast = "terrestrial"
+      )
+    },
+    .options = furrr_options(seed = TRUE)
+  )
+
+names(results) <- target_species
+```
+
+## Special Cases
+
+### Small Occurrence Datasets
+
+Species with very few occurrences (\<10 points) may not produce
+meaningful alpha-hulls. Consider using a minimum convex polygon or
+buffered points instead:
+
+```{r small_dataset, eval = FALSE}
+small_species <- rosales_example[accepted_name == "Rosa minutifolia"]
+cat("Occurrences:", nrow(small_species), "\n")
+
+# For very small datasets, the algorithm will fall back to 
+# a buffered minimum convex hull automatically
+```
+
+### Antimeridian Handling
+
+Species with ranges crossing the 180° longitude line are handled
+correctly through `terra`'s geometry validation:
+
+```{r antimeridian, eval = FALSE}
+# Example: Pacific-spanning species
+# The package automatically handles coordinate wrapping
+```
+
+### Large Occurrence Datasets
+
+For species with \>5000 occurrences, consider:
+
+- Spatial thinning to reduce computation time
+- Increasing `alphaCap` if the algorithm fails to converge
+- Using a coarser initial alpha value
+
+```{r large_dataset, eval = FALSE}
+large_species <- rosales_example[accepted_name == "Rosa canina"]
+
+# Spatial thinning example (if needed)
+# thin_data <- large_species[sample(.N, min(.N, 3000))]
+
+# Or adjust algorithm parameters
+result <- getDynamicAlphaHull(
+  large_species,
+  initialAlpha = 5,      # Start with larger alpha
+  alphaIncrement = 2,    # Increase faster
+  alphaCap = 600,        # Allow higher maximum
+  coordHeaders = c("longitude", "latitude")
+)
+```
+
+## Performance Tips
+
+1.  **Occurrence filtering**: Remove duplicate coordinates and spatial
+    outliers before processing
+2.  **Parallel processing**: Use `future` and `furrr` for batch
+    processing
+3.  **Parameter tuning**: Adjust `initialAlpha` and `alphaIncrement`
+    based on your data
+4.  **Coastline clipping**: Use `clipToCoast = "no"` during development,
+    add clipping for final results
 
 ## Reproducibility
 
-For reproducible results, always set a seed before calling
-`build_family_ranges()`:
+Set a random seed for reproducible results, as the algorithm uses
+randomization when handling collinear points:
 
-```{r reproducibility, eval = FALSE}
-set.seed(42)
-result1 <- build_family_ranges(rosales_example, context, workers = 4L)
+```{r reproducibility}
+# First run
+set.seed(7892)
+result1 <- getDynamicAlphaHull(points, clipToCoast = "no")
 
-set.seed(42)
-result2 <- build_family_ranges(rosales_example, context, workers = 4L)
+# Second run with same seed
+set.seed(7892)
+result2 <- getDynamicAlphaHull(points, clipToCoast = "no")
 
-# Results should be identical
-identical(result1$summary, result2$summary)
-identical(result1$grid_distribution, result2$grid_distribution)
+# Results are identical
+identical(result1$alpha, result2$alpha)
 ```
 
-This works because: 1. `furrr_options(seed = TRUE)` derives per-task
-seeds from the master seed 2. Results are independent of worker count
-given the same master seed 3. The jitter mechanism in alpha-hull
-triangulation is deterministic
+## Further Reading
 
-## Example Analysis
-
-Here's a complete example analyzing the included dataset:
-
-```{r complete_example, eval = FALSE}
-library(DynamicAlphaHull)
-library(data.table)
-library(ggplot2)
-
-# Load data
-data(rosales_example)
-
-# Load grid and create context
-data(grid_1deg)
-grid <- terra::unwrap(grid_1deg)
-context <- new_range_context(grid)
-
-# Build ranges
-set.seed(42)
-t0 <- Sys.time()
-result <- build_family_ranges(
-  rosales_example,
-  context,
-  workers = 8L,
-  alpha_timeout_seconds = 300,
-  progress = TRUE
-)
-elapsed <- difftime(Sys.time(), t0, units = "secs")
-
-# Summary statistics
-cat("Processing time:", round(elapsed, 1), "seconds\n")
-cat("Success rate:", sum(result$summary$success), "/",
-    nrow(result$summary), "\n")
-cat("Average per species:", round(elapsed / nrow(result$summary), 2), "s\n")
-
-# Analyze relationship between points and range size
-setDT(result$summary)
-ggplot(result$summary[success == TRUE],
-       aes(x = point_count, y = grid_count)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(method = "loess") +
-  scale_x_log10() +
-  scale_y_log10() +
-  labs(
-    x = "Number of occurrence records",
-    y = "Number of 1-degree grid cells",
-    title = "Relationship between occurrences and range size"
-  ) +
-  theme_minimal()
-
-# Top 10 largest ranges
-result$summary[order(-range_area_km2)][1:10,
-  .(accepted_name = species, point_count, grid_count, range_area_km2)]
-```
-
-## Next Steps
-
-- See `?build_family_ranges` for detailed parameter documentation
-- Explore the validation scripts in `validation/` for production
-  workflows
-- Check out performance benchmarks in `validation/output/`
+- `?getDynamicAlphaHull` - Complete parameter documentation
+- `?rosales_example` - Example occurrence dataset details
+- `?grid_1deg` - Reference grid documentation
+- `?loadWorldMap` - Coastline data access
 
 ## Session Info
 

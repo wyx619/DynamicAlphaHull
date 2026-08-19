@@ -11,8 +11,9 @@ Authors@R:
 Depends: R (>= 4.1.0)
 Imports: data.table, interp, purrr, terra
 LazyData: true
-Suggests: ggplot2, testthat (>= 3.0.0)
+Suggests: ggplot2, testthat (>= 3.0.0), knitr, rmarkdown
 Config/testthat/edition: 3
+VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
 Description: Constructs geographic range polygons from occurrence coordinates
@@ -20,5 +21,3 @@ Description: Constructs geographic range polygons from occurrence coordinates
     optional offline coastline clipping.
 License: GPL-2 | GPL-3
 Encoding: UTF-8
-
-

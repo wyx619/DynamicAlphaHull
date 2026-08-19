@@ -11,7 +11,7 @@
 #'   \item{grid_id}{Integer. Unique identifier for each grid cell (1 to 19,196)}
 #'   \item{latitude}{Numeric. Latitude of grid cell centroid}
 #'   \item{longitude}{Numeric. Longitude of grid cell centroid}
-#'   \item{纬度段}{Character. Latitudinal band label (Chinese)}
+#'   \item{lat_band}{Character. Latitudinal band label}
 #'   \item{A99}{Numeric. Additional attribute from source data}
 #' }
 #'
@@ -32,14 +32,10 @@
 #'
 #' \code{grid <- terra::unwrap(grid_1deg)}
 #'
-#' For range-building workflows, use \code{read_range_grid()} and
-#' \code{new_range_context()} which handle unwrapping automatically.
-#'
 #' \strong{Grid Cell Indexing:}
 #'
-#' Each cell has a unique \code{grid_id} (1–19,196). Range outputs reference
-#' cells by this ID, enabling compact storage of species distributions as
-#' integer vectors rather than full geometries.
+#' Each cell has a unique \code{grid_id} (1–19,196). This enables compact storage
+#' of species distributions as integer vectors rather than full geometries.
 #'
 #' \strong{Antimeridian Handling:}
 #'
@@ -51,9 +47,7 @@
 #' Derived from the reference 1-degree grid system used in rangeBuilder and
 #' alphahull validation workflows. Original file: \code{alphahull/R/1d/1.shp}.
 #'
-#' @seealso
-#' \code{\link{read_range_grid}}, \code{\link{new_range_context}},
-#' \code{\link{build_family_ranges}}
+#' @seealso \code{\link{getDynamicAlphaHull}}, \code{\link{rosales_example}}
 #'
 #' @examples
 #' # Load and unwrap the grid
@@ -72,15 +66,20 @@
 #' head(grid[, c("grid_id", "latitude", "longitude")])
 #'
 #' \dontrun{
-#' # Typical workflow: use helper functions instead of unwrapping manually
-#' grid <- read_range_grid(grid_1deg)  # accepts wrapped or file path
-#' context <- new_range_context(grid)
-#'
-#' # Build ranges
+#' # Use with getDynamicAlphaHull to find occupied grid cells
 #' data(rosales_example)
-#' result <- build_family_ranges(rosales_example, context, workers = 4L)
+#' species_data <- rosales_example[rosales_example$accepted_name == "Rosa canina", ]
 #'
-#' # Grid distribution shows which cells each species occupies
-#' head(result$grid_distribution)
+#' # Build range polygon
+#' range <- getDynamicAlphaHull(
+#'   species_data,
+#'   coordHeaders = c("longitude", "latitude"),
+#'   clipToCoast = "terrestrial"
+#' )
+#'
+#' # Find intersecting grid cells
+#' pairs <- terra::relate(grid, range$hull, relation = "intersects", pairs = TRUE)
+#' occupied_cells <- unique(grid$grid_id[pairs[, 1]])
+#' cat("Occupied cells:", length(occupied_cells), "\n")
 #' }
 "grid_1deg"
