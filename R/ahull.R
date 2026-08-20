@@ -46,8 +46,9 @@ function (x, y = NULL, alpha)
             if (length(ind) > 0) {
                 if (!((1 <= sum((compl[ind, "ind"] == 1))) &
                   (sum((compl[ind, "ind"] == 1)) < length(ind)))) {
-                  which <- which(compl[ind, "r"] == min(compl[ind[compl[ind,
-                    "r"] > 0], "r"]))
+                  posIdx <- compl[ind, "r"] > 0
+                  if (any(posIdx)) {
+                    which <- which(compl[ind, "r"] == min(compl[ind[posIdx], "r"]))
                   j <- j + 1
                   arcs[j, ] <- c(compl[ind[which], 1], compl[ind[which],
                     2], compl[ind[which], 3], compl[ind[which],
@@ -67,6 +68,7 @@ function (x, y = NULL, alpha)
                       "ind1")]
                   }
                 }
+                  }
                 ind2 <- c(ind2, ind)
             }
         }
@@ -133,16 +135,16 @@ function (x, y = NULL, alpha)
                     v.arc <- c(arcs[watch, "v.x"], arcs[watch,
                       "v.y"])
                     if (v.arc[2] >= 0) {
-                      ang.OX <- acos(v.arc[1])
+                      ang.OX <- acos(pmax(pmin(v.arc[1], 1), -1))
                     }
                     else {
-                      ang.OX <- 2 * pi - acos(v.arc[1])
+                      ang.OX <- 2 * pi - acos(pmax(pmin(v.arc[1], 1), -1))
                     }
                     v.arc.rot <- rotation(v.arc, ang.OX)
                     v.int <- intersection$v1
                     v.int.rot <- rotation(v.int, ang.OX)
                     if (v.int.rot[2] >= 0) {
-                      ang.v.int.rot.OX <- acos(v.int.rot[1])
+                      ang.v.int.rot.OX <- acos(pmax(pmin(v.int.rot[1], 1), -1))
                       angles <- c(-arcs[watch, "theta"], arcs[watch,
                         "theta"], ang.v.int.rot.OX - intersection$theta1,
                         ang.v.int.rot.OX + intersection$theta1)
@@ -155,7 +157,7 @@ function (x, y = NULL, alpha)
                       beta2 <- ang.v.int.rot.OX + ang.OX + intersection$theta1
                     }
                     else {
-                      ang.v.int.rot.OX <- acos(v.int.rot[1])
+                      ang.v.int.rot.OX <- acos(pmax(pmin(v.int.rot[1], 1), -1))
                       angles <- c(-arcs[watch, "theta"], arcs[watch,
                         "theta"], -ang.v.int.rot.OX - intersection$theta1,
                         -ang.v.int.rot.OX + intersection$theta1)
@@ -268,7 +270,7 @@ function (x, y = NULL, alpha)
                       v.intj <- intersection$v2
                       v.int.rotj <- rotation(v.intj, ang.OXj)
                       if (v.int.rotj[2] >= 0) {
-                        ang.v.int.rot.OXj <- acos(v.int.rotj[1])
+                        ang.v.int.rot.OXj <- acos(pmax(pmin(v.int.rotj[1], 1), -1))
                         anglesj <- c(-arcs[j, "theta"], arcs[j,
                           "theta"], ang.v.int.rot.OXj - intersection$theta2,
                           ang.v.int.rot.OXj + intersection$theta2)
@@ -283,7 +285,7 @@ function (x, y = NULL, alpha)
                           intersection$theta2
                       }
                       else {
-                        ang.v.int.rot.OXj <- acos(v.int.rotj[1])
+                        ang.v.int.rot.OXj <- acos(pmax(pmin(v.int.rotj[1], 1), -1))
                         anglesj <- c(-arcs[j, "theta"], arcs[j,
                           "theta"], -ang.v.int.rot.OXj - intersection$theta2,
                           -ang.v.int.rot.OXj + intersection$theta2)
