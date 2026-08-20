@@ -10,6 +10,14 @@
 occurrence records. Its primary interface is \code{getDynamicAlphaHull()}, which
 returns a \code{terra::SpatVector}.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/wyx619/DynamicAlphaHull}
+  \item Report bugs at \url{https://github.com/wyx619/DynamicAlphaHull/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Yuxuan Wang \email{wyx1743@gmail.com} (\href{https://orcid.org/0009-0003-7817-748X}{ORCID})
 

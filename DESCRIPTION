@@ -1,9 +1,11 @@
 Package: DynamicAlphaHull
 Type: Package
 Title: Dynamic Alpha-Hull Range Construction
-Version: 1.6.0
+Version: 1.6.1
 Date: 2026-08-18
 Maintainer: Yuxuan Wang <wyx1743@gmail.com>
+URL: https://github.com/wyx619/DynamicAlphaHull
+BugReports: https://github.com/wyx619/DynamicAlphaHull/issues
 Authors@R: 
     person("Yuxuan Wang", email = "wyx1743@gmail.com",
            role = c("aut", "cre"),
@@ -11,6 +13,7 @@ Authors@R:
 Depends: R (>= 4.1.0)
 Imports: data.table, interp, purrr, terra
 LazyData: true
+LazyDataCompression: xz
 Suggests: ggplot2, testthat (>= 3.0.0), knitr, rmarkdown
 Config/testthat/edition: 3
 VignetteBuilder: knitr
